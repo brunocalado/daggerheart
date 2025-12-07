@@ -893,6 +893,160 @@ var DOMAIN = /*#__PURE__*/Object.freeze({
     subclassMap: subclassMap
 });
 
+const BaseBPPerEncounter = nrCharacters => 3 * nrCharacters + 2;
+
+const AdversaryBPPerEncounter = (adversaries, characters) => {
+    const adversaryTypes = CONFIG.DH.ACTOR.allAdversaryTypes();
+    return adversaries
+        .reduce((acc, adversary) => {
+            const existingEntry = acc.find(
+                x => x.adversary.name === adversary.name && x.adversary.type === adversary.type
+            );
+            if (existingEntry) {
+                existingEntry.nr += 1;
+            } else {
+                acc.push({ adversary, nr: 1 });
+            }
+            return acc;
+        }, [])
+        .reduce((acc, entry) => {
+            const adversary = entry.adversary;
+            const type = adversaryTypes[adversary.type];
+            const bpCost = type.bpCost ?? 0;
+            if (type.partyAmountPerBP) {
+                acc += characters.length === 0 ? 0 : Math.ceil(entry.nr / characters.length);
+            } else {
+                acc += bpCost;
+            }
+
+            return acc;
+        }, 0);
+};
+
+const adversaryTypeCostBrackets = {
+    1: [
+        {
+            sort: 1,
+            types: ['minion'],
+            description: 'DAGGERHEART.CONFIG.AdversaryTypeCost.minion'
+        },
+        {
+            sort: 2,
+            types: ['social', 'support'],
+            description: 'DAGGERHEART.CONFIG.AdversaryTypeCost.support'
+        }
+    ],
+    2: [
+        {
+            sort: 1,
+            types: ['horde', 'ranged', 'skulk', 'standard'],
+            description: 'DAGGERHEART.CONFIG.AdversaryTypeCost.standard'
+        }
+    ],
+    3: [
+        {
+            sort: 1,
+            types: ['leader'],
+            description: 'DAGGERHEART.CONFIG.AdversaryTypeCost.leader'
+        }
+    ],
+    4: [
+        {
+            sort: 1,
+            types: ['bruiser'],
+            description: 'DAGGERHEART.CONFIG.AdversaryTypeCost.bruiser'
+        }
+    ],
+    5: [
+        {
+            sort: 1,
+            types: ['solo'],
+            description: 'DAGGERHEART.CONFIG.AdversaryTypeCost.solo'
+        }
+    ]
+};
+
+const BPModifiers = {
+    [-2]: {
+        manySolos: {
+            sort: 1,
+            description: 'DAGGERHEART.CONFIG.BPModifiers.manySolos.description',
+            automatic: true,
+            conditional: (_combat, adversaries) => {
+                return adversaries.filter(x => x.system.type === 'solo').length > 1;
+            }
+        },
+        increaseDamage: {
+            sort: 2,
+            description: 'DAGGERHEART.CONFIG.BPModifiers.increaseDamage.description',
+            effects: [
+                {
+                    name: 'DAGGERHEART.CONFIG.BPModifiers.increaseDamage.effect.name',
+                    description: 'DAGGERHEART.CONFIG.BPModifiers.increaseDamage.effect.description',
+                    img: 'icons/magic/control/buff-flight-wings-red.webp',
+                    changes: [
+                        {
+                            key: 'system.bonuses.damage.physical.dice',
+                            mode: 2,
+                            value: '1d4'
+                        },
+                        {
+                            key: 'system.bonuses.damage.magical.dice',
+                            mode: 2,
+                            value: '1d4'
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    [-1]: {
+        lessDifficult: {
+            sort: 2,
+            description: 'DAGGERHEART.CONFIG.BPModifiers.lessDifficult.description'
+        }
+    },
+    1: {
+        lowerTier: {
+            sort: 1,
+            description: 'DAGGERHEART.CONFIG.BPModifiers.lowerTier.description',
+            automatic: true,
+            conditional: (_combat, adversaries, characters) => {
+                const characterMaxTier = characters.reduce((maxTier, character) => {
+                    return character.system.tier > maxTier ? character.system.tier : maxTier;
+                }, 1);
+                return adversaries.some(adversary => adversary.system.tier < characterMaxTier);
+            }
+        },
+        noToughies: {
+            sort: 2,
+            description: 'DAGGERHEART.CONFIG.BPModifiers.noToughies.description',
+            automatic: true,
+            conditional: (_combat, adversaries) => {
+                const toughyTypes = ['bruiser', 'horde', 'leader', 'solo'];
+                return (
+                    adversaries.length > 0 &&
+                    !adversaries.some(adversary => toughyTypes.includes(adversary.system.type))
+                );
+            }
+        }
+    },
+    2: {
+        moreDangerous: {
+            sort: 2,
+            description: 'DAGGERHEART.CONFIG.BPModifiers.moreDangerous.description'
+        }
+    }
+};
+
+var ENCOUNTER = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    AdversaryBPPerEncounter: AdversaryBPPerEncounter,
+    BPModifiers: BPModifiers,
+    BaseBPPerEncounter: BaseBPPerEncounter,
+    adversaryTypeCostBrackets: adversaryTypeCostBrackets
+});
+
 const abilities = {
     agility: {
         id: 'agility',
@@ -1003,52 +1157,64 @@ const adversaryTypes = {
     bruiser: {
         id: 'bruiser',
         label: 'DAGGERHEART.CONFIG.AdversaryType.bruiser.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.bruiser.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.bruiser.description',
+        bpCost: 4
     },
     horde: {
         id: 'horde',
         label: 'DAGGERHEART.CONFIG.AdversaryType.horde.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.horde.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.horde.description',
+        bpCost: 2
     },
     leader: {
         id: 'leader',
         label: 'DAGGERHEART.CONFIG.AdversaryType.leader.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.leader.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.leader.description',
+        bpCost: 3,
+        bpDescription: 'DAGGERHEART.CONFIG.AdversaryType.leader.'
     },
     minion: {
         id: 'minion',
         label: 'DAGGERHEART.CONFIG.AdversaryType.minion.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.minion.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.minion.description',
+        bpCost: 1,
+        partyAmountPerBP: true
     },
     ranged: {
         id: 'ranged',
         label: 'DAGGERHEART.CONFIG.AdversaryType.ranged.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.ranged.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.ranged.description',
+        bpCost: 2
     },
     skulk: {
         id: 'skulk',
         label: 'DAGGERHEART.CONFIG.AdversaryType.skulk.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.skulk.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.skulk.description',
+        bpCost: 2
     },
     social: {
         id: 'social',
         label: 'DAGGERHEART.CONFIG.AdversaryType.social.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.social.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.social.description',
+        bpCost: 1
     },
     solo: {
         id: 'solo',
         label: 'DAGGERHEART.CONFIG.AdversaryType.solo.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.solo.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.solo.description',
+        bpCost: 5
     },
     standard: {
         id: 'standard',
         label: 'DAGGERHEART.CONFIG.AdversaryType.standard.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.standard.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.standard.description',
+        bpCost: 2
     },
     support: {
         id: 'support',
         label: 'DAGGERHEART.CONFIG.AdversaryType.support.label',
-        description: 'DAGGERHEART.ACTORS.Adversary.support.description'
+        description: 'DAGGERHEART.ACTORS.Adversary.support.description',
+        bpCost: 1
     }
 };
 
@@ -1815,7 +1981,16 @@ const allArmorFeatures = () => {
         ...armorFeatures,
         ...Object.keys(homebrewFeatures).reduce((acc, key) => {
             const feature = homebrewFeatures[key];
-            acc[key] = { ...feature, label: feature.name };
+            const actions = feature.actions.map(action => ({
+                ...action,
+                effects: action.effects.map(effect => feature.effects.find(x => x.id === effect._id)),
+                type: action.type
+            }));
+            const actionEffects = actions.flatMap(a => a.effects);
+
+            const effects = feature.effects.filter(effect => !actionEffects.some(x => x.id === effect.id));
+
+            acc[key] = { ...feature, label: feature.name, effects, actions };
             return acc;
         }, {})
     };
@@ -2770,11 +2945,21 @@ const weaponFeatures = {
 const allWeaponFeatures = () => {
     const homebrewFeatures = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Homebrew).itemFeatures
         .weaponFeatures;
+
     return {
         ...weaponFeatures,
         ...Object.keys(homebrewFeatures).reduce((acc, key) => {
             const feature = homebrewFeatures[key];
-            acc[key] = { ...feature, label: feature.name };
+
+            const actions = feature.actions.map(action => ({
+                ...action,
+                effects: action.effects.map(effect => feature.effects.find(x => x.id === effect._id)),
+                type: action.type
+            }));
+            const actionEffects = actions.flatMap(a => a.effects);
+            const effects = feature.effects.filter(effect => !actionEffects.some(x => x.id === effect.id));
+
+            acc[key] = { ...feature, label: feature.name, effects, actions };
             return acc;
         }, {})
     };
@@ -3209,8 +3394,11 @@ const userFlags = {
     countdownMode: 'countdown-mode'
 };
 
+const combatToggle = 'combat-toggle-origin';
+
 var FLAGS = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    combatToggle: combatToggle,
     compendiumBrowserDefault: compendiumBrowserDefault,
     compendiumBrowserLite: compendiumBrowserLite,
     compendiumBrowserNoFolder: compendiumBrowserNoFolder,
@@ -3220,6 +3408,10 @@ var FLAGS = /*#__PURE__*/Object.freeze({
     narrativeCountdown: narrativeCountdown,
     userFlags: userFlags
 });
+
+const hooksConfig = {
+    effectDisplayToggle: 'DHEffectDisplayToggle'
+};
 
 const typeConfig = {
     adversaries: {
@@ -3791,6 +3983,7 @@ const SYSTEM_ID = 'daggerheart';
 
 const SYSTEM = {
     id: SYSTEM_ID,
+    ENCOUNTER,
     GENERAL,
     DOMAIN,
     ACTOR,
@@ -3799,6 +3992,7 @@ const SYSTEM = {
     EFFECTS,
     ACTIONS,
     FLAGS,
+    HOOKS: hooksConfig,
     ITEMBROWSER
 };
 
@@ -4252,9 +4446,31 @@ async function waitForDiceSoNice(message) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$v, ApplicationV2: ApplicationV2$t } = foundry.applications.api;
+function refreshIsAllowed(allowedTypes, typeToCheck) {
+    switch (typeToCheck) {
+        case CONFIG.DH.GENERAL.refreshTypes.scene.id:
+        case CONFIG.DH.GENERAL.refreshTypes.session.id:
+        case CONFIG.DH.GENERAL.refreshTypes.longRest.id:
+            return allowedTypes.includes(typeToCheck);
+        case CONFIG.DH.GENERAL.refreshTypes.shortRest.id:
+            return allowedTypes.some(
+                x =>
+                    x === CONFIG.DH.GENERAL.refreshTypes.shortRest.id ||
+                    x === CONFIG.DH.GENERAL.refreshTypes.longRest.id
+            );
+        default:
+            return false;
+    }
+}
 
-class DhCharacterCreation extends HandlebarsApplicationMixin$v(ApplicationV2$t) {
+async function getCritDamageBonus(formula) {
+    const critRoll = new Roll(formula);
+    return critRoll.dice.reduce((acc, dice) => acc + dice.faces, 0);
+}
+
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$w, ApplicationV2: ApplicationV2$u } = foundry.applications.api;
+
+class DhCharacterCreation extends HandlebarsApplicationMixin$w(ApplicationV2$u) {
     constructor(character) {
         super({});
 
@@ -5396,9 +5612,9 @@ function autocomplete(settings) {
     };
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$u, ApplicationV2: ApplicationV2$s } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$v, ApplicationV2: ApplicationV2$t } = foundry.applications.api;
 
-class AttributionDialog extends HandlebarsApplicationMixin$u(ApplicationV2$s) {
+class AttributionDialog extends HandlebarsApplicationMixin$v(ApplicationV2$t) {
     constructor(item) {
         super({});
 
@@ -5488,9 +5704,9 @@ class AttributionDialog extends HandlebarsApplicationMixin$u(ApplicationV2$s) {
     }
 }
 
-const { ApplicationV2: ApplicationV2$r, HandlebarsApplicationMixin: HandlebarsApplicationMixin$t } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$s, HandlebarsApplicationMixin: HandlebarsApplicationMixin$u } = foundry.applications.api;
 
-class BeastformDialog extends HandlebarsApplicationMixin$t(ApplicationV2$r) {
+class BeastformDialog extends HandlebarsApplicationMixin$u(ApplicationV2$s) {
     constructor(configData, item) {
         super();
 
@@ -5831,9 +6047,9 @@ class BeastformDialog extends HandlebarsApplicationMixin$t(ApplicationV2$r) {
     }
 }
 
-const { ApplicationV2: ApplicationV2$q, HandlebarsApplicationMixin: HandlebarsApplicationMixin$s } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$r, HandlebarsApplicationMixin: HandlebarsApplicationMixin$t } = foundry.applications.api;
 
-class D20RollDialog extends HandlebarsApplicationMixin$s(ApplicationV2$q) {
+class D20RollDialog extends HandlebarsApplicationMixin$t(ApplicationV2$r) {
     constructor(roll, config = {}, options = {}) {
         super(options);
 
@@ -5947,14 +6163,14 @@ class D20RollDialog extends HandlebarsApplicationMixin$s(ApplicationV2$q) {
             context.isLite = this.config.roll?.lite;
             context.extraFormula = this.config.extraFormula;
             context.formula = this.roll.constructFormula(this.config);
-            if (this.actor.system.traits) context.abilities = this.getTraitModifiers();
+            if (this.actor?.system?.traits) context.abilities = this.getTraitModifiers();
 
             context.showReaction = !this.config.roll?.type && context.rollType === 'DualityRoll';
             context.reactionOverride = this.reactionOverride;
         }
 
         const tagTeamSetting = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.TagTeamRoll);
-        if (tagTeamSetting.members[this.actor.id] && !this.config.skips?.createMessage) {
+        if (this.actor && tagTeamSetting.members[this.actor.id] && !this.config.skips?.createMessage) {
             context.activeTagTeamRoll = true;
             context.tagTeamSelected = this.config.tagTeamSelected;
         }
@@ -6028,7 +6244,7 @@ class D20RollDialog extends HandlebarsApplicationMixin$s(ApplicationV2$q) {
             this.config.actionType = this.reactionOverride
                 ? CONFIG.DH.ITEM.actionTypes.reaction.id
                 : this.config.actionType === CONFIG.DH.ITEM.actionTypes.reaction.id
-                  ? null
+                  ? CONFIG.DH.ITEM.actionTypes.action.id
                   : this.config.actionType;
             this.render();
         }
@@ -6057,9 +6273,9 @@ class D20RollDialog extends HandlebarsApplicationMixin$s(ApplicationV2$q) {
     }
 }
 
-const { ApplicationV2: ApplicationV2$p, HandlebarsApplicationMixin: HandlebarsApplicationMixin$r } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$q, HandlebarsApplicationMixin: HandlebarsApplicationMixin$s } = foundry.applications.api;
 
-class DamageDialog extends HandlebarsApplicationMixin$r(ApplicationV2$p) {
+class DamageDialog extends HandlebarsApplicationMixin$s(ApplicationV2$q) {
     constructor(roll, config = {}, options = {}) {
         super(options);
 
@@ -6146,9 +6362,9 @@ class DamageDialog extends HandlebarsApplicationMixin$r(ApplicationV2$p) {
     }
 }
 
-const { ApplicationV2: ApplicationV2$o, HandlebarsApplicationMixin: HandlebarsApplicationMixin$q } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$p, HandlebarsApplicationMixin: HandlebarsApplicationMixin$r } = foundry.applications.api;
 
-class DamageReductionDialog extends HandlebarsApplicationMixin$q(ApplicationV2$o) {
+class DamageReductionDialog extends HandlebarsApplicationMixin$r(ApplicationV2$p) {
     constructor(resolve, reject, actor, damage, damageType) {
         super({});
 
@@ -6450,9 +6666,9 @@ class DamageReductionDialog extends HandlebarsApplicationMixin$q(ApplicationV2$o
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$p, ApplicationV2: ApplicationV2$n } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$q, ApplicationV2: ApplicationV2$o } = foundry.applications.api;
 
-class DhpDeathMove extends HandlebarsApplicationMixin$p(ApplicationV2$n) {
+class DhpDeathMove extends HandlebarsApplicationMixin$q(ApplicationV2$o) {
     constructor(actor) {
         super({});
 
@@ -6529,9 +6745,9 @@ class DhpDeathMove extends HandlebarsApplicationMixin$p(ApplicationV2$n) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$o, ApplicationV2: ApplicationV2$m } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$p, ApplicationV2: ApplicationV2$n } = foundry.applications.api;
 
-class DhpDowntime extends HandlebarsApplicationMixin$o(ApplicationV2$m) {
+class DhpDowntime extends HandlebarsApplicationMixin$p(ApplicationV2$n) {
     constructor(actor, shortrest) {
         super({});
 
@@ -6625,11 +6841,7 @@ class DhpDowntime extends HandlebarsApplicationMixin$o(ApplicationV2$m) {
         const actionItems = this.actor.items.reduce((acc, x) => {
             if (x.system.actions) {
                 const recoverable = x.system.actions.reduce((acc, action) => {
-                    if (
-                        action.uses.recovery &&
-                        ((action.uses.recovery === 'longRest' && !this.shortrest) ||
-                            action.uses.recovery === 'shortRest')
-                    ) {
+                    if (refreshIsAllowed([this.shortrest ? 'shortRest' : 'longRest'], action.uses.recovery)) {
                         acc.push({
                             title: x.name,
                             name: action.name,
@@ -6651,8 +6863,7 @@ class DhpDowntime extends HandlebarsApplicationMixin$o(ApplicationV2$m) {
             if (
                 x.system.resource &&
                 x.system.resource.type &&
-                ((x.system.resource.recovery === 'longRest') === !this.shortrest ||
-                    x.system.resource.recovery === 'shortRest')
+                refreshIsAllowed([this.shortrest ? 'shortRest' : 'longRest'], action.uses.recovery)
             ) {
                 acc.push({
                     title: game.i18n.localize(`TYPES.Item.${x.type}`),
@@ -6800,9 +7011,9 @@ class DhpDowntime extends HandlebarsApplicationMixin$o(ApplicationV2$m) {
     }
 }
 
-const { ApplicationV2: ApplicationV2$l, HandlebarsApplicationMixin: HandlebarsApplicationMixin$n } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$m, HandlebarsApplicationMixin: HandlebarsApplicationMixin$o } = foundry.applications.api;
 
-class ImageSelectDialog extends HandlebarsApplicationMixin$n(ApplicationV2$l) {
+class ImageSelectDialog extends HandlebarsApplicationMixin$o(ApplicationV2$m) {
     constructor(titleName, images) {
         super();
 
@@ -6871,9 +7082,9 @@ class ImageSelectDialog extends HandlebarsApplicationMixin$n(ApplicationV2$l) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$m, ApplicationV2: ApplicationV2$k } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$n, ApplicationV2: ApplicationV2$l } = foundry.applications.api;
 
-class ItemTransferDialog extends HandlebarsApplicationMixin$m(ApplicationV2$k) {
+class ItemTransferDialog extends HandlebarsApplicationMixin$n(ApplicationV2$l) {
     constructor(item) {
         super({});
 
@@ -6942,9 +7153,9 @@ class ItemTransferDialog extends HandlebarsApplicationMixin$m(ApplicationV2$k) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$l, ApplicationV2: ApplicationV2$j } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$m, ApplicationV2: ApplicationV2$k } = foundry.applications.api;
 
-class MulticlassChoiceDialog extends HandlebarsApplicationMixin$l(ApplicationV2$j) {
+class MulticlassChoiceDialog extends HandlebarsApplicationMixin$m(ApplicationV2$k) {
     constructor(actor, multiclass, options) {
         super(options);
 
@@ -7016,9 +7227,9 @@ class MulticlassChoiceDialog extends HandlebarsApplicationMixin$l(ApplicationV2$
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$k, ApplicationV2: ApplicationV2$i } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$l, ApplicationV2: ApplicationV2$j } = foundry.applications.api;
 
-class OwnershipSelection extends HandlebarsApplicationMixin$k(ApplicationV2$i) {
+class OwnershipSelection extends HandlebarsApplicationMixin$l(ApplicationV2$j) {
     constructor(name, ownership, defaultOwnership) {
         super({});
 
@@ -7096,7 +7307,7 @@ class OwnershipSelection extends HandlebarsApplicationMixin$k(ApplicationV2$i) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$j } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$k } = foundry.applications.api;
 
 const typeSettingsMap = {
     character: 'extendCharacterDescriptions',
@@ -7168,7 +7379,7 @@ const typeSettingsMap = {
  * @arg Base {T}
  */
 function DHApplicationMixin(Base) {
-    class DHSheetV2 extends HandlebarsApplicationMixin$j(Base) {
+    class DHSheetV2 extends HandlebarsApplicationMixin$k(Base) {
         /**
          * @param {DHSheetV2Configuration} [options={}]
          */
@@ -7419,10 +7630,10 @@ function DHApplicationMixin(Base) {
         _onDrop(event) {
             event.stopPropagation();
             const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
-            if (data.fromInternal === this.document.uuid) return;
-
-            if (data.type === 'ActiveEffect') {
+            if (data.type === 'ActiveEffect' && data.fromInternal !== this.document.uuid) {
                 this.document.createEmbeddedDocuments('ActiveEffect', [data.data]);
+            } else {
+                return super._onDrop(event);
             }
         }
 
@@ -7759,6 +7970,9 @@ function DHApplicationMixin(Base) {
             };
             if (inVault) data['system.inVault'] = true;
             if (disabled) data.disabled = true;
+            if (type === "domainCard" && parent?.system.domains?.length) {
+                data.system.domain = parent.system.domains[0];
+            }
 
             const doc = await cls.create(data, { parent, renderSheet: !event.shiftKey });
             if (parentIsItem && type === 'feature') {
@@ -7973,6 +8187,28 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
         context.showAttribution = !game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.appearance)
             .hideAttribution;
 
+        // Prepare inventory data
+        if (['party', 'character'].includes(this.document.type)) {
+            context.inventory = {
+                currencies: {},
+                weapons: this.document.itemTypes.weapon.sort((a, b) => a.sort - b.sort),
+                armor: this.document.itemTypes.armor.sort((a, b) => a.sort - b.sort),
+                consumables: this.document.itemTypes.consumable.sort((a, b) => a.sort - b.sort),
+                loot: this.document.itemTypes.loot.sort((a, b) => a.sort - b.sort)
+            };
+            const { title, ...currencies } = game.settings.get(
+                CONFIG.DH.id,
+                CONFIG.DH.SETTINGS.gameSettings.Homebrew
+            ).currency;
+            for (const key in currencies) {
+                context.inventory.currencies[key] = {
+                    ...currencies[key],
+                    field: context.systemFields.gold.fields[key],
+                    value: context.source.system.gold[key]
+                };
+            }
+        }
+
         return context;
     }
 
@@ -8122,68 +8358,59 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
     /*  Application Drag/Drop                       */
     /* -------------------------------------------- */
 
-    async _onDrop(event) {
+    async _onDropItem(event, item) {
         const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
-        if (data.originActor === this.document.uuid) return { cancel: true };
-
-        /* Handling transfer of inventoryItems */
-        let cancel = false;
         const physicalActorTypes = ['character', 'party'];
-        if (physicalActorTypes.includes(this.document.type)) {
-            const originActor = data.originActor ? await foundry.utils.fromUuid(data.originActor) : null;
-            if (data.originId && originActor && physicalActorTypes.includes(originActor.type)) {
-                const dropDocument = await foundry.utils.fromUuid(data.uuid);
-
-                if (dropDocument.system.metadata.isInventoryItem) {
-                    cancel = true;
-                    if (dropDocument.system.metadata.isQuantifiable) {
-                        const actorItem = originActor.items.get(data.originId);
-                        const quantityTransfered =
-                            actorItem.system.quantity === 1
-                                ? 1
-                                : await game.system.api.applications.dialogs.ItemTransferDialog.configure(dropDocument);
-
-                        if (quantityTransfered) {
-                            if (quantityTransfered === actorItem.system.quantity) {
-                                await originActor.deleteEmbeddedDocuments('Item', [data.originId]);
-                            } else {
-                                cancel = true;
-                                await actorItem.update({
-                                    'system.quantity': actorItem.system.quantity - quantityTransfered
-                                });
-                            }
-
-                            const existingItem = this.document.items.find(x => itemIsIdentical(x, dropDocument));
-                            if (existingItem) {
-                                cancel = true;
-                                await existingItem.update({
-                                    'system.quantity': existingItem.system.quantity + quantityTransfered
-                                });
-                            } else {
-                                const createData = dropDocument.toObject();
-                                await this.document.createEmbeddedDocuments('Item', [
-                                    {
-                                        ...createData,
-                                        system: {
-                                            ...createData.system,
-                                            quantity: quantityTransfered
-                                        }
-                                    }
-                                ]);
-                            }
-                        } else {
-                            cancel = true;
-                        }
-                    } else {
-                        await originActor.deleteEmbeddedDocuments('Item', [data.originId], { render: false });
-                        const createData = dropDocument.toObject();
-                        await this.document.createEmbeddedDocuments('Item', [createData]);
-                    }
-                }
-            }
+        const originActor = item.actor;
+        if (
+            item.actor?.uuid === this.document.uuid ||
+            !originActor ||
+            !physicalActorTypes.includes(this.document.type)
+        ) {
+            return super._onDropItem(event, item);
         }
 
-        return { cancel };
+        /* Handling transfer of inventoryItems */
+        if (item.system.metadata.isInventoryItem) {
+            if (item.system.metadata.isQuantifiable) {
+                const actorItem = originActor.items.get(data.originId);
+                const quantityTransfered =
+                    actorItem.system.quantity === 1
+                        ? 1
+                        : await game.system.api.applications.dialogs.ItemTransferDialog.configure(item);
+
+                if (quantityTransfered) {
+                    if (quantityTransfered === actorItem.system.quantity) {
+                        await originActor.deleteEmbeddedDocuments('Item', [data.originId]);
+                    } else {
+                        await actorItem.update({
+                            'system.quantity': actorItem.system.quantity - quantityTransfered
+                        });
+                    }
+
+                    const existingItem = this.document.items.find(x => itemIsIdentical(x, item));
+                    if (existingItem) {
+                        await existingItem.update({
+                            'system.quantity': existingItem.system.quantity + quantityTransfered
+                        });
+                    } else {
+                        const createData = item.toObject();
+                        await this.document.createEmbeddedDocuments('Item', [
+                            {
+                                ...createData,
+                                system: {
+                                    ...createData.system,
+                                    quantity: quantityTransfered
+                                }
+                            }
+                        ]);
+                    }
+                }
+            } else {
+                await originActor.deleteEmbeddedDocuments('Item', [data.originId]);
+                await this.document.createEmbeddedDocuments('Item', [item.toObject()]);
+            }
+        }
     }
 
     /**
@@ -8192,7 +8419,6 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
      */
     async _onDragStart(event) {
         const attackItem = event.currentTarget.closest('.inventory-item[data-type="attack"]');
-
         if (attackItem) {
             const attackData = {
                 type: 'Attack',
@@ -8202,13 +8428,25 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
             };
             event.dataTransfer.setData('text/plain', JSON.stringify(attackData));
             event.dataTransfer.setDragImage(attackItem.querySelector('img'), 60, 0);
-        } else if (this.document.type !== 'environment') {
-            super._onDragStart(event);
+            return;
+        } 
+        
+        const item = await getDocFromElement(event.target);
+        if (item) {
+            const dragData = {
+                originActor: this.document.uuid,
+                originId: item.id,
+                type: item.documentName,
+                uuid: item.uuid
+            };
+            event.dataTransfer.setData('text/plain', JSON.stringify(dragData));
         }
+
+        super._onDragStart(event);
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$i, ApplicationV2: ApplicationV2$h } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$j, ApplicationV2: ApplicationV2$i } = foundry.applications.api;
 
 /**
  * A UI element which displays the Users defined for this world.
@@ -8218,7 +8456,7 @@ const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$i, ApplicationV2:
  * @mixes HandlebarsApplication
  */
 
-class ItemBrowser extends HandlebarsApplicationMixin$i(ApplicationV2$h) {
+class ItemBrowser extends HandlebarsApplicationMixin$j(ApplicationV2$i) {
     constructor(options = {}) {
         super(options);
         this.items = [];
@@ -9012,14 +9250,14 @@ class FilterMenu extends foundry.applications.ux.ContextMenu {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$h } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$i } = foundry.applications.api;
 const { AbstractSidebarTab } = foundry.applications.sidebar;
 /**
  * The daggerheart menu tab.
  * @extends {AbstractSidebarTab}
  * @mixes HandlebarsApplication
  */
-class DaggerheartMenu extends HandlebarsApplicationMixin$h(AbstractSidebarTab) {
+class DaggerheartMenu extends HandlebarsApplicationMixin$i(AbstractSidebarTab) {
     constructor(options) {
         super(options);
 
@@ -9072,7 +9310,7 @@ class DaggerheartMenu extends HandlebarsApplicationMixin$h(AbstractSidebarTab) {
             if (['character', 'adversary'].includes(actor.type) && actor.prototypeToken.actorLink) {
                 const updates = {};
                 for (let item of actor.items) {
-                    if (item.system.metadata?.hasResource && types.includes(item.system.resource?.recovery)) {
+                    if (item.system.metadata?.hasResource && refreshIsAllowed(types, item.system.resource?.recovery)) {
                         if (!refreshedActors[actor.id])
                             refreshedActors[actor.id] = { name: actor.name, img: actor.img, refreshed: new Set() };
                         refreshedActors[actor.id].refreshed.add(
@@ -9093,7 +9331,7 @@ class DaggerheartMenu extends HandlebarsApplicationMixin$h(AbstractSidebarTab) {
                     if (item.system.metadata?.hasActions) {
                         const refreshTypes = new Set();
                         const actions = item.system.actions.filter(action => {
-                            if (types.includes(action.uses.recovery)) {
+                            if (refreshIsAllowed(types, action.uses.recovery)) {
                                 refreshTypes.add(action.uses.recovery);
                                 return true;
                             }
@@ -9173,9 +9411,9 @@ class DaggerheartMenu extends HandlebarsApplicationMixin$h(AbstractSidebarTab) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$g, ApplicationV2: ApplicationV2$g } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$h, ApplicationV2: ApplicationV2$h } = foundry.applications.api;
 
-class GroupRollDialog extends HandlebarsApplicationMixin$g(ApplicationV2$g) {
+class GroupRollDialog extends HandlebarsApplicationMixin$h(ApplicationV2$h) {
     constructor(actors) {
         super();
         this.actors = actors;
@@ -9861,12 +10099,12 @@ const defaultCompanionTier = {
     }
 };
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$f } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$g } = foundry.applications.api;
 
 //Just used by action config
 
 function DhpApplicationMixin(Base) {
-    return class DhpSheetV2 extends HandlebarsApplicationMixin$f(Base) {
+    return class DhpSheetV2 extends HandlebarsApplicationMixin$g(Base) {
         constructor(options = {}) {
             super(options);
 
@@ -9947,13 +10185,12 @@ function DhpApplicationMixin(Base) {
     };
 }
 
-const { ApplicationV2: ApplicationV2$f } = foundry.applications.api;
-class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
-    constructor(action, sheetUpdate) {
+const { ApplicationV2: ApplicationV2$g } = foundry.applications.api;
+class DHActionBaseConfig extends DhpApplicationMixin(ApplicationV2$g) {
+    constructor(action) {
         super({});
 
         this.action = action;
-        this.sheetUpdate = sheetUpdate;
         this.openSection = null;
     }
 
@@ -10050,10 +10287,8 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
         context.openSection = this.openSection;
         context.tabs = this._getTabs(this.constructor.TABS);
         context.config = CONFIG.DH;
-        if (!!this.action.effects) context.effects = this.action.effects.map(e => this.action.item.effects.get(e._id));
         if (this.action.damage?.hasOwnProperty('includeBase') && this.action.type === 'attack')
             context.hasBaseDamage = !!this.action.parent.attack;
-        context.getEffectDetails = this.getEffectDetails.bind(this);
         context.costOptions = this.getCostOptions();
         context.getRollTypeOptions = this.getRollTypeOptions();
         context.disableOption = this.disableOption.bind(this);
@@ -10112,10 +10347,6 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
         return filtered;
     }
 
-    getEffectDetails(id) {
-        return this.action.item.effects.get(id);
-    }
-
     _prepareSubmitData(_event, formData) {
         const submitData = foundry.utils.expandObject(formData.object);
 
@@ -10161,7 +10392,7 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
         this.constructor.updateForm.bind(this)(null, null, { object: foundry.utils.flattenObject(data) });
     }
 
-    static addDamage(event) {
+    static addDamage(_event) {
         if (!this.action.damage.parts) return;
         const data = this.action.toObject(),
             part = {};
@@ -10170,7 +10401,7 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
         this.constructor.updateForm.bind(this)(null, null, { object: foundry.utils.flattenObject(data) });
     }
 
-    static removeDamage(event, button) {
+    static removeDamage(_event, button) {
         if (!this.action.damage.parts) return;
         const data = this.action.toObject(),
             index = button.dataset.index;
@@ -10178,11 +10409,44 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
         this.constructor.updateForm.bind(this)(null, null, { object: foundry.utils.flattenObject(data) });
     }
 
-    static async addEffect(event) {
+    /** Specific implementation in extending classes **/
+    static async addEffect(_event) {}
+    static removeEffect(_event, _button) {}
+    static editEffect(_event) {}
+
+    async close(options) {
+        this.tabGroups.primary = 'base';
+        await super.close(options);
+    }
+}
+
+class DHActionConfig extends DHActionBaseConfig {
+    static DEFAULT_OPTIONS = {
+        ...DHActionBaseConfig.DEFAULT_OPTIONS,
+        actions: {
+            ...DHActionBaseConfig.DEFAULT_OPTIONS.actions,
+            addEffect: this.addEffect,
+            removeEffect: this.removeEffect,
+            editEffect: this.editEffect
+        }
+    };
+
+    async _prepareContext(options) {
+        const context = await super._prepareContext(options);
+        if (!!this.action.effects) context.effects = this.action.effects.map(e => this.action.item.effects.get(e._id));
+        context.getEffectDetails = this.getEffectDetails.bind(this);
+
+        return context;
+    }
+
+    static async addEffect(_event) {
         if (!this.action.effects) return;
-        const effectData = this._addEffectData.bind(this)(),
-            [created] = await this.action.item.createEmbeddedDocuments('ActiveEffect', [effectData], { render: false }),
-            data = this.action.toObject();
+        const effectData = this._addEffectData.bind(this)();
+        const data = this.action.toObject();
+
+        const [created] = await this.action.item.createEmbeddedDocuments('ActiveEffect', [effectData], {
+            render: false
+        });
         data.effects.push({ _id: created._id });
         this.constructor.updateForm.bind(this)(null, null, { object: foundry.utils.flattenObject(data) });
         this.action.item.effects.get(created._id).sheet.render(true);
@@ -10202,6 +10466,10 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
         };
     }
 
+    getEffectDetails(id) {
+        return this.action.item.effects.get(id);
+    }
+
     static removeEffect(event, button) {
         if (!this.action.effects) return;
         const index = button.dataset.index,
@@ -10213,11 +10481,6 @@ class DHActionConfig extends DhpApplicationMixin(ApplicationV2$f) {
     static editEffect(event) {
         const id = event.target.closest('[data-effect-id]')?.dataset?.effectId;
         this.action.item.effects.get(id).sheet.render(true);
-    }
-
-    async close(options) {
-        this.tabGroups.primary = 'base';
-        await super.close(options);
     }
 }
 
@@ -10982,9 +11245,9 @@ class DHFeature extends BaseDataItem {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$e, ApplicationV2: ApplicationV2$e } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$f, ApplicationV2: ApplicationV2$f } = foundry.applications.api;
 
-class DhlevelUp extends HandlebarsApplicationMixin$e(ApplicationV2$e) {
+class DhlevelUp extends HandlebarsApplicationMixin$f(ApplicationV2$f) {
     constructor(actor) {
         super({});
 
@@ -12838,11 +13101,72 @@ class DhpActor extends Actor {
         if (this.system._getTags) tags.push(...this.system._getTags());
         return tags;
     }
+
+    /** Get active effects */
+    getActiveEffects() {
+        const statusMap = new Map(foundry.CONFIG.statusEffects.map(status => [status.id, status]));
+        return this.effects
+            .filter(x => !x.disabled)
+            .reduce((acc, effect) => {
+                acc.push(effect);
+
+                const currentStatusActiveEffects = acc.filter(
+                    x => x.statuses.size === 1 && x.name === game.i18n.localize(statusMap.get(x.statuses.first()).name)
+                );
+
+                for (var status of effect.statuses) {
+                    if (!currentStatusActiveEffects.find(x => x.statuses.has(status))) {
+                        const statusData = statusMap.get(status);
+                        if (statusData) {
+                            acc.push({
+                                condition: status,
+                                appliedBy: game.i18n.localize(effect.name),
+                                name: game.i18n.localize(statusData.name),
+                                statuses: new Set([status]),
+                                img: statusData.icon ?? statusData.img,
+                                description: game.i18n.localize(statusData.description),
+                                tint: effect.tint
+                            });
+                        }
+                    }
+                }
+
+                return acc;
+            }, []);
+    }
+
+    /* Temporarily copying the foundry method to add a fix to a bug with scenes 
+       https://discord.com/channels/170995199584108546/1296292044011995136/1446693077443149856
+    */
+    getDependentTokens({ scenes, linked = false } = {}) {
+        if (this.isToken && !scenes) return [this.token];
+        if (scenes) scenes = Array.isArray(scenes) ? scenes : [scenes];
+        else scenes = Array.from(this._dependentTokens.keys());
+
+        /* Code to filter out nonexistant scenes */
+        scenes = scenes.filter(scene => game.scenes.some(x => x.id === scene.id));
+
+        if (this.isToken) {
+            const parent = this.token.parent;
+            return scenes.includes(parent) ? [this.token] : [];
+        }
+
+        const allTokens = [];
+        for (const scene of scenes) {
+            if (!scene) continue;
+            const tokens = this._dependentTokens.get(scene);
+            for (const token of tokens ?? []) {
+                if (!linked || token.actorLink) allTokens.push(token);
+            }
+        }
+
+        return allTokens;
+    }
 }
 
-const { ApplicationV2: ApplicationV2$d, HandlebarsApplicationMixin: HandlebarsApplicationMixin$d } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$e, HandlebarsApplicationMixin: HandlebarsApplicationMixin$e } = foundry.applications.api;
 
-class ActionSelectionDialog extends HandlebarsApplicationMixin$d(ApplicationV2$d) {
+class ActionSelectionDialog extends HandlebarsApplicationMixin$e(ApplicationV2$e) {
     constructor(item, event, options = {}) {
         super(options);
         this.#item = item;
@@ -12958,6 +13282,13 @@ class DHItem extends foundry.documents.Item {
             throw new Error(`The key ${id} does not exist in the ${embeddedName} Collection`);
         }
         return doc;
+    }
+
+    static async createDocuments(sources, operation) {
+        // Ensure that items being created are valid to the actor its being added to
+        const actor = operation.parent;
+        sources = actor?.system?.isItemValid ? sources.filter((s) => actor.system.isItemValid(s)) : sources;
+        return super.createDocuments(sources, operation);
     }
 
     /* -------------------------------------------- */
@@ -13209,25 +13540,6 @@ class Party extends DHBaseActorSheet {
     /* -------------------------------------------- */
     /*  Prepare Context                             */
     /* -------------------------------------------- */
-
-    async _prepareContext(_options) {
-        const context = await super._prepareContext(_options);
-
-        context.inventory = { currencies: {} };
-        const { title, ...currencies } = game.settings.get(
-            CONFIG.DH.id,
-            CONFIG.DH.SETTINGS.gameSettings.Homebrew
-        ).currency;
-        for (let key in currencies) {
-            context.inventory.currencies[key] = {
-                ...currencies[key],
-                field: context.systemFields.gold.fields[key],
-                value: context.source.system.gold[key]
-            };
-        }
-
-        return context;
-    }
 
     async _preparePartContext(partId, context, options) {
         context = await super._preparePartContext(partId, context, options);
@@ -13555,30 +13867,9 @@ class Party extends DHBaseActorSheet {
     }
 
     /* -------------------------------------------- */
-    async _onDragStart(event) {
-        const item = await getDocFromElement(event.target);
-        const dragData = {
-            originActor: this.document.uuid,
-            originId: item.id,
-            type: item.documentName,
-            uuid: item.uuid
-        };
 
-        event.dataTransfer.setData('text/plain', JSON.stringify(dragData));
-        super._onDragStart(event);
-    }
-
-    async _onDrop(event) {
-        // Prevent event bubbling to avoid duplicate handling
-        event.preventDefault();
-        event.stopPropagation();
+    async _onDropActor(event, document) {
         const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
-
-        const { cancel } = await super._onDrop(event);
-        if (cancel) return;
-
-        const document = await foundry.utils.fromUuid(data.uuid);
-
         if (document instanceof DhpActor && Party.ALLOWED_ACTOR_TYPES.includes(document.type)) {
             const currentMembers = this.document.system.partyMembers.map(x => x.uuid);
             if (currentMembers.includes(data.uuid)) {
@@ -13586,11 +13877,11 @@ class Party extends DHBaseActorSheet {
             }
 
             await this.document.update({ 'system.partyMembers': [...currentMembers, document.uuid] });
-        } else if (document instanceof DHItem) {
-            this.document.createEmbeddedDocuments('Item', [document.toObject()]);
         } else {
             ui.notifications.warn(game.i18n.localize('DAGGERHEART.UI.Notifications.onlyCharactersInPartySheet'));
         }
+
+        return null;
     }
 
     static async #deletePartyMember(event, target) {
@@ -13670,7 +13961,8 @@ const GMUpdateEvent = {
 
 const RefreshType = {
     Countdown: 'DhCoundownRefresh',
-    TagTeamRoll: 'DhTagTeamRollRefresh'
+    TagTeamRoll: 'DhTagTeamRollRefresh',
+    EffectsDisplay: 'DhEffectsDisplayRefresh'
 };
 
 const registerSocketHooks = () => {
@@ -13743,9 +14035,9 @@ const emitAsGM = async (eventName, callback, update, uuid = null, refresh = null
     } else return callback(update);
 };
 
-const { ApplicationV2: ApplicationV2$c, HandlebarsApplicationMixin: HandlebarsApplicationMixin$c } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$d, HandlebarsApplicationMixin: HandlebarsApplicationMixin$d } = foundry.applications.api;
 
-class RerollDamageDialog extends HandlebarsApplicationMixin$c(ApplicationV2$c) {
+class RerollDamageDialog extends HandlebarsApplicationMixin$d(ApplicationV2$d) {
     constructor(message, options = {}) {
         super(options);
 
@@ -14032,9 +14324,9 @@ class RerollDamageDialog extends HandlebarsApplicationMixin$c(ApplicationV2$c) {
     }
 }
 
-const { ApplicationV2: ApplicationV2$b, HandlebarsApplicationMixin: HandlebarsApplicationMixin$b } = foundry.applications.api;
+const { ApplicationV2: ApplicationV2$c, HandlebarsApplicationMixin: HandlebarsApplicationMixin$c } = foundry.applications.api;
 
-class ResourceDiceDialog extends HandlebarsApplicationMixin$b(ApplicationV2$b) {
+class ResourceDiceDialog extends HandlebarsApplicationMixin$c(ApplicationV2$c) {
     constructor(item, actor, options = {}) {
         super(options);
 
@@ -14130,9 +14422,9 @@ class ResourceDiceDialog extends HandlebarsApplicationMixin$b(ApplicationV2$b) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$a, ApplicationV2: ApplicationV2$a } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$b, ApplicationV2: ApplicationV2$b } = foundry.applications.api;
 
-class TagTeamDialog extends HandlebarsApplicationMixin$a(ApplicationV2$a) {
+class TagTeamDialog extends HandlebarsApplicationMixin$b(ApplicationV2$b) {
     constructor(party) {
         super();
 
@@ -14206,28 +14498,37 @@ class TagTeamDialog extends HandlebarsApplicationMixin$a(ApplicationV2$a) {
             cost: this.data.initiator.cost
         };
 
-        context.selectedData = Object.values(context.members).reduce(
-            (acc, member) => {
-                if (!member.roll) return acc;
-                if (member.selected) {
-                    acc.result = `${member.roll.system.roll.total} ${member.roll.system.roll.result.label}`;
-                }
+        const selectedMember = Object.values(context.members).find(x => x.selected);
+        const selectedIsCritical = selectedMember?.roll?.system?.isCritical;
+        context.selectedData = {
+            result: selectedMember
+                ? `${selectedMember.roll.system.roll.total} ${selectedMember.roll.system.roll.result.label}`
+                : null,
+            damageValues: null
+        };
 
-                if (context.usesDamage) {
-                    if (!acc.damageValues) acc.damageValues = {};
-                    for (let damage of member.damageValues) {
-                        if (acc.damageValues[damage.key]) {
-                            acc.damageValues[damage.key].total += damage.total;
-                        } else {
-                            acc.damageValues[damage.key] = foundry.utils.deepClone(damage);
-                        }
+        for (const member of Object.values(context.members)) {
+            if (!member.roll) continue;
+            if (context.usesDamage) {
+                if (!context.selectedData.damageValues) context.selectedData.damageValues = {};
+                for (let damage of member.damageValues) {
+                    const damageTotal = member.roll.system.isCritical
+                        ? damage.total
+                        : selectedIsCritical
+                          ? damage.total + (await getCritDamageBonus(member.roll.system.damage[damage.key].formula))
+                          : damage.total;
+                    if (context.selectedData.damageValues[damage.key]) {
+                        context.selectedData.damageValues[damage.key].total += damageTotal;
+                    } else {
+                        context.selectedData.damageValues[damage.key] = {
+                            ...foundry.utils.deepClone(damage),
+                            total: damageTotal
+                        };
                     }
                 }
+            }
+        }
 
-                return acc;
-            },
-            { result: null, damageValues: null }
-        );
         context.showResult = Object.values(context.members).reduce((enabled, member) => {
             if (!member.roll) return enabled;
             if (context.usesDamage) {
@@ -14331,21 +14632,41 @@ class TagTeamDialog extends HandlebarsApplicationMixin$a(ApplicationV2$a) {
             .map(key => game.messages.get(this.data.members[key].messageId));
 
         const systemData = foundry.utils.deepClone(mainRoll).system.toObject();
+        const criticalRoll = systemData.roll.isCritical;
         for (let roll of secondaryRolls) {
             if (roll.system.hasDamage) {
                 for (let key in roll.system.damage) {
                     var damage = roll.system.damage[key];
+                    const damageTotal =
+                        !roll.system.isCritical && criticalRoll
+                            ? (await getCritDamageBonus(damage.formula)) + damage.total
+                            : damage.total;
                     if (systemData.damage[key]) {
-                        systemData.damage[key].total += damage.total;
-                        systemData.damage[key].parts = [...systemData.damage[key].parts, ...damage.parts];
+                        const updatedDamageParts = damage.parts;
+                        if (!roll.system.isCritical && criticalRoll) {
+                            for (let part of updatedDamageParts) {
+                                const criticalDamage = await getCritDamageBonus(part.formula);
+                                if (criticalDamage) {
+                                    damage.formula = `${damage.formula} + ${criticalDamage}`;
+                                    part.formula = `${part.formula} + ${criticalDamage}`;
+                                    part.modifierTotal = part.modifierTotal + criticalDamage;
+                                    part.total += criticalDamage;
+                                    part.roll = new Roll(part.formula);
+                                }
+                            }
+                        }
+
+                        systemData.damage[key].formula = `${systemData.damage[key].formula} + ${damage.formula}`;
+                        systemData.damage[key].total += damageTotal;
+                        systemData.damage[key].parts = [...systemData.damage[key].parts, ...updatedDamageParts];
                     } else {
-                        systemData.damage[key] = damage;
+                        systemData.damage[key] = { ...damage, total: damageTotal, parts: updatedDamageParts };
                     }
                 }
             }
         }
-        systemData.title = game.i18n.localize('DAGGERHEART.APPLICATIONS.TagTeamSelect.chatMessageRollTitle');
 
+        systemData.title = game.i18n.localize('DAGGERHEART.APPLICATIONS.TagTeamSelect.chatMessageRollTitle');
         const cls = getDocumentClass('ChatMessage'),
             msgData = {
                 type: 'dualityRoll',
@@ -14363,14 +14684,16 @@ class TagTeamDialog extends HandlebarsApplicationMixin$a(ApplicationV2$a) {
         const fearUpdate = { key: 'fear', value: null, total: null, enabled: true };
         for (let memberId of Object.keys(this.data.members)) {
             const resourceUpdates = [];
-            if (systemData.roll.isCritical || systemData.roll.result.duality === 1) {
-                const value =
-                    memberId !== this.data.initiator.id
-                        ? 1
-                        : this.data.initiator.cost
-                          ? 1 - this.data.initiator.cost
-                          : 1;
+            const rollGivesHope = systemData.roll.isCritical || systemData.roll.result.duality === 1;
+            if (memberId === this.data.initiator.id) {
+                const value = this.data.initiator.cost
+                    ? rollGivesHope
+                        ? 1 - this.data.initiator.cost
+                        : -this.data.initiator.cost
+                    : 1;
                 resourceUpdates.push({ key: 'hope', value: value, total: -value, enabled: true });
+            } else if (rollGivesHope) {
+                resourceUpdates.push({ key: 'hope', value: 1, total: -1, enabled: true });
             }
             if (systemData.roll.isCritical) resourceUpdates.push({ key: 'stress', value: -1, total: 1, enabled: true });
             if (systemData.roll.result.duality === -1) {
@@ -14485,7 +14808,6 @@ class DHTokenHUD extends foundry.applications.hud.TokenHUD {
 
     async _prepareContext(options) {
         const context = await super._prepareContext(options);
-
         context.partyOnCanvas =
             this.actor.type === 'party' &&
             this.actor.system.partyMembers.some(member => member.getActiveTokens().length > 0);
@@ -14495,6 +14817,7 @@ class DHTokenHUD extends foundry.applications.hud.TokenHUD {
         context.canToggleCombat = DHTokenHUD.#nonCombatTypes.includes(this.actor.type)
             ? false
             : context.canToggleCombat;
+
         context.systemStatusEffects = Object.keys(context.statusEffects).reduce((acc, key) => {
             const effect = context.statusEffects[key];
             if (effect.systemEffect) {
@@ -14657,16 +14980,18 @@ class DHTokenHUD extends foundry.applications.hud.TokenHUD {
         }
 
         // Update the status of effects which are active for the token actor
-        const activeEffects = this.actor?.effects || [];
+        const activeEffects = this.actor?.getActiveEffects() || [];
         for (const effect of activeEffects) {
             for (const statusId of effect.statuses) {
                 const status = choices[statusId];
+                status.instances = 1 + (status.instances ?? 0);
+                status.locked = status.locked || effect.condition || status.instances > 1;
                 if (!status) continue;
                 if (status._id) {
                     if (status._id !== effect.id) continue;
                 }
                 status.isActive = true;
-                if (effect.getFlag('core', 'overlay')) status.isOverlay = true;
+                if (effect.getFlag?.('core', 'overlay')) status.isOverlay = true;
             }
         }
 
@@ -15063,9 +15388,9 @@ class DhCharacterLevelUp extends DhlevelUp {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$9, ApplicationV2: ApplicationV2$9 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$a, ApplicationV2: ApplicationV2$a } = foundry.applications.api;
 
-class DhlevelUpViewMode extends HandlebarsApplicationMixin$9(ApplicationV2$9) {
+class DhlevelUpViewMode extends HandlebarsApplicationMixin$a(ApplicationV2$a) {
     constructor(actor) {
         super({});
 
@@ -15284,13 +15609,13 @@ class DhAppearance extends foundry.abstract.DataModel {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$8, ApplicationV2: ApplicationV2$8 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$9, ApplicationV2: ApplicationV2$9 } = foundry.applications.api;
 
 /**
  * @import {ApplicationClickAction} from "@client/applications/_types.mjs"
  */
 
-class DHAppearanceSettings extends HandlebarsApplicationMixin$8(ApplicationV2$8) {
+class DHAppearanceSettings extends HandlebarsApplicationMixin$9(ApplicationV2$9) {
     /**@inheritdoc */
     static DEFAULT_OPTIONS = {
         tag: 'form',
@@ -15871,9 +16196,9 @@ class DhVariantRules extends foundry.abstract.DataModel {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$7, ApplicationV2: ApplicationV2$7 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$8, ApplicationV2: ApplicationV2$8 } = foundry.applications.api;
 
-class DhAutomationSettings extends HandlebarsApplicationMixin$7(ApplicationV2$7) {
+class DhAutomationSettings extends HandlebarsApplicationMixin$8(ApplicationV2$8) {
     constructor() {
         super({});
 
@@ -15944,9 +16269,9 @@ class DhAutomationSettings extends HandlebarsApplicationMixin$7(ApplicationV2$7)
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$6, ApplicationV2: ApplicationV2$6 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$7, ApplicationV2: ApplicationV2$7 } = foundry.applications.api;
 
-class DhHomebrewSettings extends HandlebarsApplicationMixin$6(ApplicationV2$6) {
+class DhHomebrewSettings extends HandlebarsApplicationMixin$7(ApplicationV2$7) {
     constructor() {
         super({});
 
@@ -16370,9 +16695,9 @@ class DhHomebrewSettings extends HandlebarsApplicationMixin$6(ApplicationV2$6) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$5, ApplicationV2: ApplicationV2$5 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$6, ApplicationV2: ApplicationV2$6 } = foundry.applications.api;
 
-class DHVariantRuleSettings extends HandlebarsApplicationMixin$5(ApplicationV2$5) {
+class DHVariantRuleSettings extends HandlebarsApplicationMixin$6(ApplicationV2$6) {
     constructor() {
         super({});
 
@@ -16463,7 +16788,8 @@ class AdversarySheet extends DHBaseActorSheet {
                     action: 'editAttribution'
                 }
             ]
-        }
+        },
+        dragDrop: [{ dragSelector: '[data-item-id][draggable="true"]', dropSelector: null }]
     };
 
     static PARTS = {
@@ -16903,33 +17229,7 @@ class CharacterSheet extends DHBaseActorSheet {
         context.resources.stress.emptyPips =
             context.resources.stress.max < maxResource ? maxResource - context.resources.stress.max : 0;
 
-        context.inventory = { currencies: {} };
-        const { title, ...currencies } = game.settings.get(
-            CONFIG.DH.id,
-            CONFIG.DH.SETTINGS.gameSettings.Homebrew
-        ).currency;
-        for (let key in currencies) {
-            context.inventory.currencies[key] = {
-                ...currencies[key],
-                field: context.systemFields.gold.fields[key],
-                value: context.source.system.gold[key]
-            };
-        }
-        // context.inventory = {
-        //     currency: {
-        //         title: game.i18n.localize('DAGGERHEART.CONFIG.Gold.title'),
-        //         coins: game.i18n.localize('DAGGERHEART.CONFIG.Gold.coins'),
-        //         handfuls: game.i18n.localize('DAGGERHEART.CONFIG.Gold.handfuls'),
-        //         bags: game.i18n.localize('DAGGERHEART.CONFIG.Gold.bags'),
-        //         chests: game.i18n.localize('DAGGERHEART.CONFIG.Gold.chests')
-        //     }
-        // };
-
         context.beastformActive = this.document.effects.find(x => x.type === 'beastform');
-
-        // if (context.inventory.length === 0) {
-        //     context.inventory = Array(1).fill(Array(5).fill([]));
-        // }
 
         return context;
     }
@@ -17406,6 +17706,7 @@ class CharacterSheet extends DHBaseActorSheet {
         };
         const result = await this.document.diceRoll({
             ...config,
+            actionType: 'action',
             headerTitle: `${game.i18n.localize('DAGGERHEART.GENERAL.dualityRoll')}: ${this.actor.name}`,
             title: game.i18n.format('DAGGERHEART.UI.Chat.dualityRoll.abilityCheckTitle', {
                 ability: abilityLabel
@@ -17591,47 +17892,9 @@ class CharacterSheet extends DHBaseActorSheet {
         });
     }
 
-    async _onDragStart(event) {
-        const item = await getDocFromElement(event.target);
-
-        const dragData = {
-            originActor: this.document.uuid,
-            originId: item.id,
-            type: item.documentName,
-            uuid: item.uuid
-        };
-
-        event.dataTransfer.setData('text/plain', JSON.stringify(dragData));
-
-        super._onDragStart(event);
-    }
-
-    async _onDrop(event) {
-        // Prevent event bubbling to avoid duplicate handling
-        event.preventDefault();
-        event.stopPropagation();
-        const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
-
-        const { cancel } = await super._onDrop(event);
-        if (cancel) return;
-
-        this._onDropItem(event, data);
-    }
-
-    async _onDropItem(event, data) {
-        const item = await Item.implementation.fromDropData(data);
-        const itemData = item.toObject();
-
-        if (item.type === 'domainCard' && !this.document.system.loadoutSlot.available) {
-            itemData.system.inVault = true;
-        }
-
-        const typesThatReplace = ['ancestry', 'community'];
-        if (typesThatReplace.includes(item.type)) {
-            await this.document.deleteEmbeddedDocuments(
-                'Item',
-                this.document.items.filter(x => x.type === item.type).map(x => x.id)
-            );
+    async _onDropItem(event, item) {
+        if (this.document.uuid === item.parent?.uuid) {
+            return super._onDropItem(event, item);
         }
 
         if (item.type === 'beastform') {
@@ -17641,20 +17904,27 @@ class CharacterSheet extends DHBaseActorSheet {
                 );
             }
 
+            const itemData = item.toObject();
             const data = await game.system.api.data.items.DHBeastform.getWildcardImage(this.document, itemData);
-            if (data) {
-                if (!data.selectedImage) return;
-                else {
-                    if (data.usesDynamicToken) itemData.system.tokenRingImg = data.selectedImage;
-                    else itemData.system.tokenImg = data.selectedImage;
-                }
+            if (!data?.selectedImage) {
+                return;
+            } else if (data) {
+                if (data.usesDynamicToken) itemData.system.tokenRingImg = data.selectedImage;
+                else itemData.system.tokenImg = data.selectedImage;
+                return await this._onDropItemCreate(itemData);
             }
         }
 
-        if (this.document.uuid === item.parent?.uuid) return this._onSortItem(event, itemData);
-        const createdItem = await this._onDropItemCreate(itemData);
+        // If this is a type that gets deleted, delete it first (but still defer to super)
+        const typesThatReplace = ['ancestry', 'community'];
+        if (typesThatReplace.includes(item.type)) {
+            await this.document.deleteEmbeddedDocuments(
+                'Item',
+                this.document.items.filter(x => x.type === item.type).map(x => x.id)
+            );
+        }
 
-        return createdItem;
+        return super._onDropItem(event, item);
     }
 
     async _onDropItemCreate(itemData, event) {
@@ -17813,11 +18083,11 @@ class DhpEnvironment extends DHBaseActorSheet {
         header: { template: 'systems/daggerheart/templates/sheets/actors/environment/header.hbs' },
         features: {
             template: 'systems/daggerheart/templates/sheets/actors/environment/features.hbs',
-            scrollable: ['feature-section']
+            scrollable: ['.feature-section']
         },
         potentialAdversaries: {
             template: 'systems/daggerheart/templates/sheets/actors/environment/potentialAdversaries.hbs',
-            scrollable: ['items-sections']
+            scrollable: ['.items-section']
         },
         notes: { template: 'systems/daggerheart/templates/sheets/actors/environment/notes.hbs' }
     };
@@ -17906,12 +18176,13 @@ class DhpEnvironment extends DHBaseActorSheet {
     /* -------------------------------------------- */
 
     async _onDragStart(event) {
-        const item = event.currentTarget.closest('.inventory-item');
-
+        const item = event.currentTarget.closest('.inventory-item[data-type=adversary]');
         if (item) {
             const adversaryData = { type: 'Actor', uuid: item.dataset.itemUuid };
             event.dataTransfer.setData('text/plain', JSON.stringify(adversaryData));
             event.dataTransfer.setDragImage(item, 60, 0);
+        } else {
+            return super._onDragStart(event);
         }
     }
 
@@ -19114,6 +19385,71 @@ var _module$a = /*#__PURE__*/Object.freeze({
     items: _module$b
 });
 
+class DHActionSettingsConfig extends DHActionBaseConfig {
+    constructor(action, effects, sheetUpdate) {
+        super(action);
+
+        this.effects = effects;
+        this.sheetUpdate = sheetUpdate;
+    }
+
+    static DEFAULT_OPTIONS = {
+        ...DHActionBaseConfig.DEFAULT_OPTIONS,
+        actions: {
+            ...DHActionBaseConfig.DEFAULT_OPTIONS.actions,
+            addEffect: this.addEffect,
+            removeEffect: this.removeEffect,
+            editEffect: this.editEffect
+        }
+    };
+
+    async _prepareContext(options) {
+        const context = await super._prepareContext(options);
+        context.effects = this.effects;
+        context.getEffectDetails = this.getEffectDetails.bind(this);
+
+        return context;
+    }
+
+    getEffectDetails(id) {
+        return this.effects.find(x => x.id === id);
+    }
+
+    static async addEffect(_event) {
+        if (!this.action.effects) return;
+        const effectData = game.system.api.data.activeEffects.BaseEffect.getDefaultObject();
+        const data = this.action.toObject();
+
+        this.sheetUpdate(data, effectData);
+        this.effects = [...this.effects, effectData];
+        data.effects.push({ _id: effectData.id });
+        this.constructor.updateForm.bind(this)(null, null, { object: foundry.utils.flattenObject(data) });
+    }
+
+    static removeEffect(event, button) {
+        if (!this.action.effects) return;
+        const index = button.dataset.index,
+            effectId = this.action.effects[index]._id;
+        this.constructor.removeElement.bind(this)(event, button);
+        this.sheetUpdate(
+            this.action.toObject(),
+            this.effects.find(x => x.id === effectId),
+            true
+        );
+    }
+
+    static async editEffect(event) {
+        const id = event.target.closest('[data-effect-id]')?.dataset?.effectId;
+        const updatedEffect = await game.system.api.applications.sheetConfigs.SettingActiveEffectConfig.configure(
+            this.getEffectDetails(id)
+        );
+        if (!updatedEffect) return;
+
+        this.effects = await this.sheetUpdate(this.action.toObject(), { ...updatedEffect, id });
+        this.render();
+    }
+}
+
 /**@typedef {import('@client/applications/_types.mjs').ApplicationClickAction} ApplicationClickAction */
 
 class DHCharacterSettings extends DHBaseActorSettings {
@@ -19489,9 +19825,9 @@ class DHCompanionSettings extends DHBaseActorSettings {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$4, ApplicationV2: ApplicationV2$4 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$5, ApplicationV2: ApplicationV2$5 } = foundry.applications.api;
 
-class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(ApplicationV2$4) {
+class SettingActiveEffectConfig extends HandlebarsApplicationMixin$5(ApplicationV2$5) {
     constructor(effect) {
         super({});
 
@@ -19512,7 +19848,7 @@ class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(Application
     }
 
     static DEFAULT_OPTIONS = {
-        classes: ['daggerheart', 'sheet', 'dh-style', 'active-effect-config'],
+        classes: ['daggerheart', 'sheet', 'dh-style', 'active-effect-config', 'standard-form'],
         tag: 'form',
         position: {
             width: 560
@@ -19620,6 +19956,7 @@ class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(Application
         if (partId in context.tabs) context.tab = context.tabs[partId];
         switch (partId) {
             case 'details':
+                context.statuses = CONFIG.statusEffects.map(s => ({ value: s.id, label: game.i18n.localize(s.name) }));
                 context.isActorEffect = false;
                 context.isItemEffect = true;
                 const useGeneric = game.settings.get(
@@ -19627,10 +19964,13 @@ class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(Application
                     CONFIG.DH.SETTINGS.gameSettings.appearance
                 ).showGenericStatusEffects;
                 if (!useGeneric) {
-                    context.statuses = Object.values(CONFIG.DH.GENERAL.conditions).map(status => ({
-                        value: status.id,
-                        label: game.i18n.localize(status.name)
-                    }));
+                    context.statuses = [
+                        ...context.statuses,
+                        Object.values(CONFIG.DH.GENERAL.conditions).map(status => ({
+                            value: status.id,
+                            label: game.i18n.localize(status.name)
+                        }))
+                    ];
                 }
                 break;
             case 'changes':
@@ -19646,7 +19986,7 @@ class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(Application
         return context;
     }
 
-    static async #onSubmit(event, form, formData) {
+    static async #onSubmit(_event, _form, formData) {
         this.data = foundry.utils.expandObject(formData.object);
         this.close();
     }
@@ -19682,11 +20022,11 @@ class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(Application
      * @type {ApplicationClickAction}
      */
     static async #addChange() {
-        const submitData = foundry.utils.expandObject(new FormDataExtended(this.form).object);
-        const changes = Object.values(submitData.changes ?? {});
-        changes.push({});
+        const { changes, ...rest } = foundry.utils.expandObject(new FormDataExtended(this.form).object);
+        const updatedChanges = Object.values(changes ?? {});
+        updatedChanges.push({});
 
-        this.effect.changes = changes;
+        this.effect = { ...rest, changes: updatedChanges };
         this.render();
     }
 
@@ -19697,12 +20037,12 @@ class SettingActiveEffectConfig extends HandlebarsApplicationMixin$4(Application
      */
     static async #deleteChange(event) {
         const submitData = foundry.utils.expandObject(new FormDataExtended(this.form).object);
-        const changes = Object.values(submitData.changes);
+        const updatedChanges = Object.values(submitData.changes);
         const row = event.target.closest('li');
         const index = Number(row.dataset.index) || 0;
-        changes.splice(index, 1);
+        updatedChanges.splice(index, 1);
 
-        this.effect.changes = changes;
+        this.effect = { ...submitData, changes: updatedChanges };
         this.render();
     }
 
@@ -20513,6 +20853,19 @@ class DHBaseAction extends ActionMixin(foundry.abstract.DataModel) {
 
 class DHDamageAction extends DHBaseAction {
     static extraSchemas = [...super.extraSchemas, 'damage', 'target', 'effects'];
+
+    /**
+     * Return a display ready damage formula string
+     * @returns Formula string
+     */
+    getDamageFormula() {
+        const strings = [];
+        for (const { value } of this.damage.parts) {
+            strings.push(Roll.replaceFormulaData(value.getFormula(), this.actor?.getRollData() ?? {}));
+        }
+
+        return strings.join(' + ');
+    }
 }
 
 class DHAttackAction extends DHDamageAction {
@@ -20773,9 +21126,9 @@ var _module$9 = /*#__PURE__*/Object.freeze({
     actionsTypes: actionsTypes
 });
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$3, ApplicationV2: ApplicationV2$3 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$4, ApplicationV2: ApplicationV2$4 } = foundry.applications.api;
 
-class SettingFeatureConfig extends HandlebarsApplicationMixin$3(ApplicationV2$3) {
+class SettingFeatureConfig extends HandlebarsApplicationMixin$4(ApplicationV2$4) {
     constructor(configTitle, move, movePath, settings, optionalParts, options) {
         super(options);
 
@@ -20874,6 +21227,8 @@ class SettingFeatureConfig extends HandlebarsApplicationMixin$3(ApplicationV2$3)
         return (
             (await foundry.applications.api.DialogV2.input({
                 window: { title: game.i18n.localize('DAGGERHEART.CONFIG.SelectAction.selectType') },
+                position: { width: 300 },
+                classes: ['daggerheart', 'dh-style'],
                 content: await foundry.applications.handlebars.renderTemplate(
                     'systems/daggerheart/templates/actionTypes/actionType.hbs',
                     { types: CONFIG.DH.ACTIONS.actionTypes }
@@ -20930,16 +21285,55 @@ class SettingFeatureConfig extends HandlebarsApplicationMixin$3(ApplicationV2$3)
             this.render();
         } else {
             const action = this.move.actions.get(id);
-            await new DHActionConfig(action, async updatedMove => {
+            await new DHActionSettingsConfig(action, this.move.effects, async (updatedMove, effectData, deleteEffect) => {
+                let updatedEffects = null;
+                if (effectData) {
+                    const currentEffects = foundry.utils.getProperty(this.settings, `${this.movePath}.effects`);
+                    const existingEffectIndex = currentEffects.findIndex(x => x.id === effectData.id);
+
+                    updatedEffects = deleteEffect
+                        ? currentEffects.filter(x => x.id !== effectData.id)
+                        : existingEffectIndex === -1
+                          ? [...currentEffects, effectData]
+                          : currentEffects.with(existingEffectIndex, effectData);
+                    await this.settings.updateSource({
+                        [`${this.movePath}.effects`]: updatedEffects
+                    });
+                }
+
                 await this.settings.updateSource({ [`${this.actionsPath}.${id}`]: updatedMove });
                 this.move = foundry.utils.getProperty(this.settings, this.movePath);
                 this.render();
+                return updatedEffects;
             }).render(true);
         }
     }
 
     static async removeItem(_, target) {
-        await this.settings.updateSource({ [`${this.actionsPath}.-=${target.dataset.id}`]: null });
+        const { type, id } = target.dataset;
+        if (type === 'effect') {
+            const move = foundry.utils.getProperty(this.settings, this.movePath);
+            for (const action of move.actions) {
+                const remainingEffects = action.effects.filter(x => x._id !== id);
+                if (action.effects.length !== remainingEffects.length) {
+                    await action.update({
+                        effects: remainingEffects.map(x => {
+                            const { _id, ...rest } = x;
+                            return { ...rest, _id: _id };
+                        })
+                    });
+                }
+            }
+            await this.settings.updateSource({
+                [this.movePath]: {
+                    effects: move.effects.filter(x => x.id !== id),
+                    actions: move.actions
+                }
+            });
+        } else {
+            await this.settings.updateSource({ [`${this.actionsPath}.-=${target.dataset.id}`]: null });
+        }
+
         this.move = foundry.utils.getProperty(this.settings, this.movePath);
         this.render();
     }
@@ -21090,9 +21484,9 @@ class DHEnvironmentSettings extends DHBaseActorSettings {
 
     async _onDrop(event) {
         const data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
-        if (data.fromInternal) return;
-
         const item = await fromUuid(data.uuid);
+        if (data.fromInternal && item?.parent?.uuid === this.actor.uuid) return;
+
         if (item.type === 'adversary' && event.target.closest('.category-container')) {
             const target = event.target.closest('.category-container');
             const path = `system.potentialAdversaries.${target.dataset.potentialAdversary}.adversaries`;
@@ -21277,6 +21671,7 @@ class DhPrototypeTokenConfig extends foundry.applications.sheets.PrototypeTokenC
 var _module$8 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     ActionConfig: DHActionConfig,
+    ActionSettingsConfig: DHActionSettingsConfig,
     ActiveEffectConfig: DhActiveEffectConfig,
     AdversarySettings: DHAdversarySettings,
     CharacterSettings: DHCharacterSettings,
@@ -21287,6 +21682,27 @@ var _module$8 = /*#__PURE__*/Object.freeze({
     SettingActiveEffectConfig: SettingActiveEffectConfig,
     SettingFeatureConfig: SettingFeatureConfig
 });
+
+class DhActorDirectory extends foundry.applications.sidebar.tabs.ActorDirectory {
+    static DEFAULT_OPTIONS = {
+        renderUpdateKeys: ['system.levelData.level.current', 'system.partner', 'system.tier']
+    };
+
+    static _entryPartial = 'systems/daggerheart/templates/ui/sidebar/actor-document-partial.hbs';
+
+    async _prepareDirectoryContext(context, options) {
+        await super._prepareDirectoryContext(context, options);
+        const adversaryTypes = CONFIG.DH.ACTOR.allAdversaryTypes();
+        const environmentTypes = CONFIG.DH.ACTOR.environmentTypes;
+        context.getTypeLabel = document => {
+            return document.type === 'adversary'
+                ? game.i18n.localize(adversaryTypes[document.system.type]?.label ?? 'TYPES.Actor.adversary')
+                : document.type === 'environment'
+                  ? game.i18n.localize(environmentTypes[document.system.type]?.label ?? 'TYPES.Actor.environment')
+                  : null;
+        };
+    }
+}
 
 class DhSidebar extends foundry.applications.sidebar.Sidebar {
     /** @override */
@@ -21365,6 +21781,7 @@ class DhSidebar extends foundry.applications.sidebar.Sidebar {
 var _module$7 = /*#__PURE__*/Object.freeze({
     __proto__: null,
     DaggerheartMenu: DaggerheartMenu,
+    DhActorDirectory: DhActorDirectory,
     DhSidebar: DhSidebar
 });
 
@@ -21617,9 +22034,9 @@ var countdowns = /*#__PURE__*/Object.freeze({
     default: DhCountdowns$1
 });
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$2, ApplicationV2: ApplicationV2$2 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$3, ApplicationV2: ApplicationV2$3 } = foundry.applications.api;
 
-class CountdownEdit extends HandlebarsApplicationMixin$2(ApplicationV2$2) {
+class CountdownEdit extends HandlebarsApplicationMixin$3(ApplicationV2$3) {
     constructor() {
         super();
 
@@ -21852,7 +22269,7 @@ class CountdownEdit extends HandlebarsApplicationMixin$2(ApplicationV2$2) {
     }
 }
 
-const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$1, ApplicationV2: ApplicationV2$1 } = foundry.applications.api;
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$2, ApplicationV2: ApplicationV2$2 } = foundry.applications.api;
 
 /**
  * A UI element which displays the countdowns in this world.
@@ -21861,11 +22278,10 @@ const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$1, ApplicationV2:
  * @mixes HandlebarsApplication
  */
 
-class DhCountdowns extends HandlebarsApplicationMixin$1(ApplicationV2$1) {
+class DhCountdowns extends HandlebarsApplicationMixin$2(ApplicationV2$2) {
     constructor(options = {}) {
         super(options);
 
-        this.sidebarCollapsed = true;
         this.setupHooks();
     }
 
@@ -21949,11 +22365,10 @@ class DhCountdowns extends HandlebarsApplicationMixin$1(ApplicationV2$1) {
     async _prepareContext(options) {
         const context = await super._prepareContext(options);
         context.isGM = game.user.isGM;
-        context.sidebarCollapsed = this.sidebarCollapsed;
+
         context.iconOnly =
             game.user.getFlag(CONFIG.DH.id, CONFIG.DH.FLAGS.userFlags.countdownMode) ===
             CONFIG.DH.GENERAL.countdownAppMode.iconOnly;
-
         const setting = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Countdowns);
         context.countdowns = this.#getCountdowns().reduce((acc, { key, countdown, ownership }) => {
             const playersWithAccess = game.users.reduce((acc, user) => {
@@ -22533,11 +22948,33 @@ class DhCombatTracker extends foundry.applications.sidebar.tabs.CombatTracker {
         }
     };
 
+    /** @inheritDoc */
+    async _preparePartContext(_partId, context, _options) {
+        return context;
+    }
+
+    async _prepareContext(options) {
+        const context = await super._prepareContext(options);
+
+        await this._prepareTrackerContext(context, options);
+        await this._prepareCombatContext(context, options);
+
+        return context;
+    }
+
     async _prepareCombatContext(context, options) {
         await super._prepareCombatContext(context, options);
 
+        const modifierBP =
+            this.combats
+                .find(x => x.active)
+                ?.system?.extendedBattleToggles?.reduce((acc, toggle) => acc + toggle.category, 0) ?? 0;
+        const maxBP = CONFIG.DH.ENCOUNTER.BaseBPPerEncounter(context.characters.length) + modifierBP;
+        const currentBP = AdversaryBPPerEncounter(context.adversaries, context.characters);
+
         Object.assign(context, {
-            fear: game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Resources.Fear)
+            fear: game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Resources.Fear),
+            battlepoints: { max: maxBP, current: currentBP, hasModifierBP: Boolean(modifierBP) }
         });
     }
 
@@ -22612,6 +23049,7 @@ class DhCombatTracker extends foundry.applications.sidebar.tabs.CombatTracker {
             resource,
             active: index === combat.turn,
             canPing: combatant.sceneId === canvas.scene?.id && game.user.hasPermission('PING_CANVAS'),
+            type: combatant.actor.system.type,
             img: await this._getCombatantThumbnail(combatant)
         };
 
@@ -22697,6 +23135,122 @@ class DhCombatTracker extends foundry.applications.sidebar.tabs.CombatTracker {
 
         await combatant.update({ 'system.actionTokens': newIndex });
         this.render();
+    }
+}
+
+const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$1, ApplicationV2: ApplicationV2$1 } = foundry.applications.api;
+
+/**
+ * A UI element which displays the Active Effects on a selected token.
+ *
+ * @extends ApplicationV2
+ * @mixes HandlebarsApplication
+ */
+
+class DhEffectsDisplay extends HandlebarsApplicationMixin$1(ApplicationV2$1) {
+    constructor(options = {}) {
+        super(options);
+
+        this.setupHooks();
+    }
+
+    /** @inheritDoc */
+    static DEFAULT_OPTIONS = {
+        id: 'effects-display',
+        tag: 'div',
+        classes: ['daggerheart', 'dh-style', 'effects-display'],
+        window: {
+            frame: false,
+            positioned: false,
+            resizable: false,
+            minimizable: false
+        },
+        actions: {}
+    };
+
+    /** @override */
+    static PARTS = {
+        resources: {
+            root: true,
+            template: 'systems/daggerheart/templates/ui/effects-display.hbs'
+        }
+    };
+
+    get element() {
+        return document.body.querySelector('.daggerheart.dh-style.effects-display');
+    }
+
+    get hidden() {
+        return this.element.classList.contains('hidden');
+    }
+
+    _attachPartListeners(partId, htmlElement, options) {
+        super._attachPartListeners(partId, htmlElement, options);
+
+        if (this.element) {
+            this.element.querySelectorAll('.effect-container a').forEach(element => {
+                element.addEventListener('contextmenu', this.removeEffect.bind(this));
+            });
+        }
+    }
+
+    /** @override */
+    async _prepareContext(options) {
+        const context = await super._prepareContext(options);
+        context.effects = DhEffectsDisplay.getTokenEffects();
+
+        return context;
+    }
+
+    static getTokenEffects = token => {
+        const actor = token
+            ? token.actor
+            : canvas.tokens.controlled.length === 0
+              ? !game.user.isGM
+                  ? game.user.character
+                  : null
+              : canvas.tokens.controlled[0].actor;
+        return actor?.getActiveEffects() ?? [];
+    };
+
+    toggleHidden(token, focused) {
+        const effects = DhEffectsDisplay.getTokenEffects(focused ? token : null);
+        this.element.hidden = effects.length === 0;
+
+        Hooks.callAll(CONFIG.DH.HOOKS.effectDisplayToggle, this.element.hidden, token);
+
+        this.render();
+    }
+
+    async removeEffect(event) {
+        const element = event.target.closest('.effect-container');
+        const effects = DhEffectsDisplay.getTokenEffects();
+        const effect = effects.find(x => x.id === element.id);
+        await effect.delete();
+        this.render();
+    }
+
+    setupHooks() {
+        Hooks.on('controlToken', this.toggleHidden.bind(this));
+        Hooks.on(RefreshType.EffectsDisplay, this.toggleHidden.bind(this));
+    }
+
+    async close(options) {
+        /* Opt out of Foundry's standard behavior of closing all application windows marked as UI when Escape is pressed */
+        if (options.closeKey) return;
+
+        Hooks.off('controlToken', this.toggleHidden);
+        Hooks.off(RefreshType.EffectsDisplay, this.toggleHidden);
+        return super.close(options);
+    }
+
+    async _onRender(context, options) {
+        await super._onRender(context, options);
+
+        this.element.hidden = context.effects.length === 0;
+        if (options?.force) {
+            document.getElementById('ui-right-column-1')?.appendChild(this.element);
+        }
     }
 }
 
@@ -22950,6 +23504,7 @@ var _module$6 = /*#__PURE__*/Object.freeze({
     DhChatLog: DhpChatLog,
     DhCombatTracker: DhCombatTracker,
     DhCountdowns: DhCountdowns,
+    DhEffectsDisplay: DhEffectsDisplay,
     DhFearTracker: FearTracker,
     DhHotbar: DhHotbar,
     ItemBrowser: ItemBrowser
@@ -23094,12 +23649,45 @@ var applications = /*#__PURE__*/Object.freeze({
 
 class DhCombat extends foundry.abstract.TypeDataModel {
     static defineSchema() {
-        foundry.data.fields;
-        return {};
+        const fields = foundry.data.fields;
+        return {
+            battleToggles: new fields.ArrayField(
+                new fields.SchemaField({
+                    category: new fields.NumberField({ required: true, integer: true }),
+                    grouping: new fields.StringField({ required: true })
+                })
+            )
+        };
+    }
+
+    /** Includes automatic BPModifiers  */
+    get extendedBattleToggles() {
+        const modifiers = CONFIG.DH.ENCOUNTER.BPModifiers;
+        const adversaries =
+            this.parent.turns?.filter(x => x.isNPC)?.map(x => ({ ...x.actor, type: x.actor.system.type })) ?? [];
+        const characters = this.parent.turns?.filter(x => !x.isNPC) ?? [];
+
+        const activeAutomatic = Object.keys(modifiers).reduce((acc, categoryKey) => {
+            const category = modifiers[categoryKey];
+            acc.push(
+                ...Object.keys(category).reduce((acc, groupingKey) => {
+                    const grouping = category[groupingKey];
+                    if (grouping.automatic && grouping.conditional?.(this.parent, adversaries, characters)) {
+                        acc.push({ category: Number(categoryKey), grouping: groupingKey });
+                    }
+
+                    return acc;
+                }, [])
+            );
+
+            return acc;
+        }, []);
+
+        return [...this.battleToggles, ...activeAutomatic];
     }
 }
 
-class DhCombatant extends foundry.abstract.TypeDataModel {
+let DhCombatant$1 = class DhCombatant extends foundry.abstract.TypeDataModel {
     static defineSchema() {
         const fields = foundry.data.fields;
         return {
@@ -23116,7 +23704,7 @@ class DhCombatant extends foundry.abstract.TypeDataModel {
         const defeatedConditions = new Set([unconscious.id, defeated.id, dead.id]);
         return this.defeated || this.actor?.statuses.intersection(defeatedConditions)?.size;
     }
-}
+};
 
 /**
  * A subclass of {@link foundry.data.fields.DocumentUUIDField} to allow selecting a foreign document reference
@@ -24225,6 +24813,10 @@ class DhCompanion extends BaseDataActor {
     get proficiency() {
         return this.partner?.system?.proficiency ?? 1;
     }
+    
+    isItemValid() {
+        return false;
+    }
 
     prepareBaseData() {
         this.attack.roll.bonus = this.partner?.system?.spellcastModifier ?? 0;
@@ -24422,6 +25014,10 @@ class DhpAdversary extends BaseDataActor {
         return this.parent.items.filter(x => x.type === 'feature');
     }
 
+    isItemValid(source) {
+        return source.type === "feature";
+    }
+
     async _preUpdate(changes, options, user) {
         const allowed = await super._preUpdate(changes, options, user);
         if (allowed === false) return false;
@@ -24554,6 +25150,10 @@ class DhEnvironment extends BaseDataActor {
     get features() {
         return this.parent.items.filter(x => x.type === 'feature');
     }
+
+    isItemValid(source) {
+        return source.type === "feature";
+    }
 }
 
 class DhParty extends BaseDataActor {
@@ -24579,6 +25179,10 @@ class DhParty extends BaseDataActor {
     static DEFAULT_ICON = 'systems/daggerheart/assets/icons/documents/actors/dark-squad.svg';
 
     /* -------------------------------------------- */
+
+    isItemValid(source) {
+        return ["weapon", "armor", "consumable", "loot"].includes(source.type);
+    }
 
     prepareBaseData() {
         super.prepareBaseData();
@@ -24727,14 +25331,22 @@ class BeastformEffect extends BaseEffect {
                     base64: false
                 }),
                 tokenSize: new fields.SchemaField({
-                    height: new fields.NumberField({ integer: true, nullable: true }),
-                    width: new fields.NumberField({ integer: true, nullable: true })
+                    height: new fields.NumberField({ integer: false, nullable: true }),
+                    width: new fields.NumberField({ integer: false, nullable: true })
                 })
             }),
             advantageOn: new fields.ArrayField(new fields.StringField()),
             featureIds: new fields.ArrayField(new fields.StringField()),
             effectIds: new fields.ArrayField(new fields.StringField())
         };
+    }
+
+    /** @inheritDoc */
+    static migrateData(source) {
+        if (!source.characterTokenData.tokenSize.height) source.characterTokenData.tokenSize.height = 1;
+        if (!source.characterTokenData.tokenSize.width) source.characterTokenData.tokenSize.width = 1;
+
+        return super.migrateData(source);
     }
 
     async _onCreate(_data, _options, userId) {
@@ -25654,7 +26266,7 @@ class SaveField extends fields$4.SchemaField {
         if (SaveField.getAutomation() !== CONFIG.DH.SETTINGS.actionAutomationChoices.never.id || force) {
             targets ??= config.targets.filter(t => !config.hasRoll || t.hit);
             await SaveField.rollAllSave.call(this, targets, config.event, message);
-        } else return false;
+        } else return;
     }
 
     /**
@@ -26810,6 +27422,10 @@ class DHDomainCard extends BaseDataItem {
                 ui.notifications.error(game.i18n.localize('DAGGERHEART.UI.Notifications.duplicateDomainCard'));
                 return false;
             }
+
+            if (!this.actor.system.loadoutSlot.available) {
+                data.system.inVault = true;
+            }
         }
     }
 
@@ -27494,7 +28110,7 @@ var _module = /*#__PURE__*/Object.freeze({
 var models = /*#__PURE__*/Object.freeze({
     __proto__: null,
     DhCombat: DhCombat,
-    DhCombatant: DhCombatant,
+    DhCombatant: DhCombatant$1,
     DhTagTeamRoll: DhTagTeamRoll,
     actions: _module$9,
     activeEffects: _module$3,
@@ -27523,6 +28139,66 @@ class DhpCombat extends Combat {
         }
 
         return a.name.localeCompare(b.name);
+    }
+
+    async toggleModifierEffects(add, actors, category, groupingKey) {
+        const effectData = category && groupingKey ? [{ category, grouping: groupingKey }] : this.system.battleToggles;
+        if (add) {
+            const effects = effectData.reduce((acc, toggle) => {
+                const grouping = CONFIG.DH.ENCOUNTER.BPModifiers[toggle.category]?.[toggle.grouping];
+                if (!grouping?.effects?.length) return acc;
+                acc.push(
+                    ...grouping.effects.map(effect => ({
+                        ...effect,
+                        name: game.i18n.localize(effect.name),
+                        description: game.i18n.localize(effect.description),
+                        flags: {
+                            [`${CONFIG.DH.id}.${CONFIG.DH.FLAGS.combatToggle}`]: {
+                                category: toggle.category,
+                                grouping: toggle.grouping
+                            }
+                        }
+                    }))
+                );
+
+                return acc;
+            }, []);
+
+            if (!effects.length) return;
+
+            for (let actor of actors) {
+                await actor.createEmbeddedDocuments(
+                    'ActiveEffect',
+                    effects.map(effect => ({
+                        ...effect,
+                        name: game.i18n.localize(effect.name),
+                        description: game.i18n.localize(effect.description)
+                    }))
+                );
+            }
+        } else {
+            for (let actor of actors) {
+                await actor.deleteEmbeddedDocuments(
+                    'ActiveEffect',
+                    actor.effects
+                        .filter(x => {
+                            const flag = x.getFlag(CONFIG.DH.id, CONFIG.DH.FLAGS.combatToggle);
+                            if (!flag) return false;
+                            return effectData.some(
+                                data => flag.category == data.category && flag.grouping === data.grouping
+                            );
+                        })
+                        .map(x => x.id)
+                );
+            }
+        }
+    }
+}
+
+class DhCombatant extends Combatant {
+    /**@inheritdoc */
+    get isNPC() {
+        return this.actor?.isNPC ?? (!this.actor || !this.hasPlayerOwner);
     }
 }
 
@@ -27609,6 +28285,20 @@ class DhActiveEffect extends foundry.documents.ActiveEffect {
         }
 
         await super._preCreate(data, options, user);
+    }
+
+    /** @inheritdoc */
+    _onCreate(data, options, userId) {
+        super._onCreate(data, options, userId);
+
+        Hooks.callAll(RefreshType.EffectsDisplay);
+    }
+
+    /** @inheritdoc */
+    _onDelete(data, options, userId) {
+        super._onDelete(data, options, userId);
+
+        Hooks.callAll(RefreshType.EffectsDisplay);
     }
 
     /* -------------------------------------------- */
@@ -28081,17 +28771,95 @@ class DHToken extends TokenDocument {
         }
         return attributes;
     }
-    
+
     _shouldRecordMovementHistory() {
         return false;
+    }
+
+    /**@inheritdoc */
+    static async createCombatants(tokens, combat) {
+        combat ??= game.combats.viewed;
+        if (combat?.system?.battleToggles?.length) {
+            await combat.toggleModifierEffects(
+                true,
+                tokens.map(x => x.actor)
+            );
+        }
+        super.createCombatants(tokens, combat ?? {});
+    }
+
+    /**@inheritdoc */
+    static async deleteCombatants(tokens, { combat } = {}) {
+        combat ??= game.combats.viewed;
+        if (combat?.system?.battleToggles?.length) {
+            await combat.toggleModifierEffects(
+                false,
+                tokens.map(x => x.actor)
+            );
+        }
+        super.deleteCombatants(tokens, combat ?? {});
     }
 }
 
 class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
+    #wide = false;
+    #bordered = false;
+
     async activate(element, options = {}) {
         const { TextEditor } = foundry.applications.ux;
 
         let html = options.html;
+        if (element.dataset.tooltip?.startsWith('#battlepoints#')) {
+            this.#wide = true;
+
+            html = await this.getBattlepointHTML(element.dataset.combatId);
+            options.direction = this._determineItemTooltipDirection(element);
+            super.activate(element, { ...options, html: html });
+
+            const lockedTooltip = this.lockTooltip();
+            lockedTooltip.querySelectorAll('.battlepoint-toggle-container input').forEach(element => {
+                element.addEventListener('input', this.toggleModifier.bind(this));
+            });
+            return;
+        } else {
+            this.#wide = false;
+        }
+
+        if (element.dataset.tooltip === '#effect-display#') {
+            this.#bordered = true;
+            let effect = {};
+            if (element.dataset.uuid) {
+                const effectData = (await foundry.utils.fromUuid(element.dataset.uuid)).toObject();
+                effect = {
+                    ...effectData,
+                    name: game.i18n.localize(effectData.name),
+                    description: game.i18n.localize(effectData.description ?? effectData.parent.system.description)
+                };
+            } else {
+                const conditions = CONFIG.DH.GENERAL.conditions();
+                const condition = conditions[element.dataset.condition];
+                effect = {
+                    ...condition,
+                    name: game.i18n.localize(condition.name),
+                    description: game.i18n.localize(condition.description),
+                    appliedBy: element.dataset.appliedBy,
+                    isLockedCondition: true
+                };
+            }
+
+            html = await foundry.applications.handlebars.renderTemplate(
+                `systems/daggerheart/templates/ui/tooltip/effect-display.hbs`,
+                {
+                    effect
+                }
+            );
+
+            this.tooltip.innerHTML = html;
+            options.direction = this._determineItemTooltipDirection(element);
+        } else {
+            this.#bordered = false;
+        }
+
         if (element.dataset.tooltip?.startsWith('#item#')) {
             const itemUuid = element.dataset.tooltip.slice(6);
             const item = await foundry.utils.fromUuid(itemUuid);
@@ -28201,6 +28969,14 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
         super.activate(element, { ...options, html: html });
     }
 
+    _setStyle(position = {}) {
+        super._setStyle(position);
+
+        if (this.#bordered) {
+            this.tooltip.classList.add('bordered-tooltip');
+        }
+    }
+
     _determineItemTooltipDirection(element, prefered = this.constructor.TOOLTIP_DIRECTIONS.LEFT) {
         const pos = element.getBoundingClientRect();
         const dirs = this.constructor.TOOLTIP_DIRECTIONS;
@@ -28263,6 +29039,130 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
                 );
             }
         }
+    }
+
+    /**@inheritdoc */
+    _setStyle(position = {}) {
+        super._setStyle(position);
+
+        if (this.#wide) {
+            this.tooltip.classList.add('wide');
+        }
+    }
+
+    /**@inheritdoc */
+    lockTooltip() {
+        const clone = super.lockTooltip();
+        clone.classList.add('wide');
+
+        return clone;
+    }
+
+    /** Get HTML for Battlepoints tooltip */
+    async getBattlepointHTML(combatId) {
+        const combat = game.combats.get(combatId);
+        const adversaries =
+            combat.turns?.filter(x => x.actor?.isNPC)?.map(x => ({ ...x.actor, type: x.actor.system.type })) ?? [];
+        const characters = combat.turns?.filter(x => !x.isNPC) ?? [];
+
+        const nrCharacters = characters.length;
+        const currentBP = AdversaryBPPerEncounter(adversaries, characters);
+        const maxBP = combat.system.extendedBattleToggles.reduce(
+            (acc, toggle) => acc + toggle.category,
+            BaseBPPerEncounter(nrCharacters)
+        );
+
+        const categories = combat.combatants.reduce((acc, combatant) => {
+            if (combatant.actor.type === 'adversary') {
+                const keyData = Object.keys(acc).reduce((identifiers, categoryKey) => {
+                    if (identifiers) return identifiers;
+                    const category = acc[categoryKey];
+                    const groupingIndex = category.findIndex(grouping =>
+                        grouping.types.includes(combatant.actor.system.type)
+                    );
+                    if (groupingIndex !== -1) identifiers = { categoryKey, groupingIndex };
+
+                    return identifiers;
+                }, null);
+                if (keyData) {
+                    const { categoryKey, groupingIndex } = keyData;
+                    const grouping = acc[categoryKey][groupingIndex];
+                    const partyAmount = CONFIG.DH.ACTOR.adversaryTypes[combatant.actor.system.type].partyAmountPerBP;
+                    grouping.individuals = (grouping.individuals ?? 0) + 1;
+
+                    const currentNr = grouping.nr ?? 0;
+                    grouping.nr = partyAmount ? Math.ceil(grouping.individuals / (nrCharacters ?? 0)) : currentNr + 1;
+                }
+            }
+
+            return acc;
+        }, foundry.utils.deepClone(CONFIG.DH.ENCOUNTER.adversaryTypeCostBrackets));
+
+        const extendedBattleToggles = combat.system.extendedBattleToggles;
+        const toggles = Object.keys(CONFIG.DH.ENCOUNTER.BPModifiers)
+            .reduce((acc, categoryKey) => {
+                const category = CONFIG.DH.ENCOUNTER.BPModifiers[categoryKey];
+                acc.push(
+                    ...Object.keys(category).reduce((acc, toggleKey) => {
+                        const grouping = category[toggleKey];
+                        acc.push({
+                            ...grouping,
+                            categoryKey: Number(categoryKey),
+                            toggleKey,
+                            checked: extendedBattleToggles.find(
+                                x => x.category == categoryKey && x.grouping === toggleKey
+                            ),
+                            disabled: grouping.automatic
+                        });
+
+                        return acc;
+                    }, [])
+                );
+                return acc;
+            }, [])
+            .sort((a, b) => {
+                if (a.categoryKey < b.categoryKey) return -1;
+                if (a.categoryKey > b.categoryKey) return 1;
+                else return a.toggleKey.localeCompare(b.toggleKey);
+            });
+
+        return await foundry.applications.handlebars.renderTemplate(
+            `systems/daggerheart/templates/ui/tooltip/battlepoints.hbs`,
+            {
+                combatId: combat.id,
+                nrCharacters,
+                currentBP,
+                maxBP,
+                categories,
+                toggles
+            }
+        );
+    }
+
+    /** Enable/disable a BP modifier */
+    async toggleModifier(event) {
+        const { combatId, category, grouping } = event.target.dataset;
+        const combat = game.combats.get(combatId);
+        await combat.update({
+            system: {
+                battleToggles: combat.system.battleToggles.some(x => x.category == category && x.grouping === grouping)
+                    ? combat.system.battleToggles.filter(x => x.category != category && x.grouping !== grouping)
+                    : [...combat.system.battleToggles, { category: Number(category), grouping }]
+            }
+        });
+
+        await combat.toggleModifierEffects(
+            event.target.checked,
+            combat.combatants.filter(x => x.actor.type === 'adversary').map(x => x.actor),
+            category,
+            grouping
+        );
+
+        this.tooltip.innerHTML = await this.getBattlepointHTML(combatId);
+        const lockedTooltip = this.lockTooltip();
+        lockedTooltip.querySelectorAll('.battlepoint-toggle-container input').forEach(element => {
+            element.addEventListener('input', this.toggleModifier.bind(this));
+        });
     }
 }
 
@@ -28374,6 +29274,7 @@ class DhTemplateManager {
 
 var documents = /*#__PURE__*/Object.freeze({
     __proto__: null,
+    DHCombatant: DhCombatant,
     DHItem: DHItem,
     DhActiveEffect: DhActiveEffect,
     DhChatMessage: DhpChatMessage,
@@ -29569,14 +30470,8 @@ class RegisterHandlebarsHelpers {
         return accum;
     }
 
-    static damageFormula(attack, actor) {
-        const traitTotal = actor.system.traits?.[attack.roll.trait]?.value;
-        const instances = [
-            attack.damage.parts.map(x => Roll.replaceFormulaData(x.value.getFormula(), actor)).join(' + '),
-            traitTotal
-        ].filter(x => x);
-
-        return instances.join(traitTotal > 0 ? ' + ' : ' - ');
+    static damageFormula(attack) {
+        return attack.getDamageFormula();
     }
 
     static formulaValue(formula, item) {
@@ -30572,29 +31467,7 @@ class DhTokenPlaceable extends foundry.canvas.placeables.Token {
         this.effects.overlay = null;
 
         // Categorize effects
-        const statusMap = new Map(foundry.CONFIG.statusEffects.map(status => [status.id, status]));
-        const activeEffects = (this.actor ? this.actor.effects.filter(x => !x.disabled) : []).reduce((acc, effect) => {
-            acc.push(effect);
-
-            const currentStatusActiveEffects = acc.filter(
-                x => x.statuses.size === 1 && x.name === game.i18n.localize(statusMap.get(x.statuses.first())?.name)
-            );
-            for (var status of effect.statuses) {
-                if (!currentStatusActiveEffects.find(x => x.statuses.has(status))) {
-                    const statusData = statusMap.get(status);
-                    if (statusData) {
-                        acc.push({
-                            name: game.i18n.localize(statusData.name),
-                            statuses: [status],
-                            img: statusData.icon ?? statusData.img,
-                            tint: effect.tint
-                        });
-                    }
-                }
-            }
-
-            return acc;
-        }, []);
+        const activeEffects = this.actor?.getActiveEffects() ?? [];
         const overlayEffect = activeEffects.findLast(e => e.img && e.getFlag?.('core', 'overlay'));
 
         // Draw effects
@@ -30694,7 +31567,8 @@ CONFIG.ActiveEffect.dataModels = config$2;
 
 CONFIG.Combat.documentClass = DhpCombat;
 CONFIG.Combat.dataModels = { base: DhCombat };
-CONFIG.Combatant.dataModels = { base: DhCombatant };
+CONFIG.Combatant.documentClass = DhCombatant;
+CONFIG.Combatant.dataModels = { base: DhCombatant$1 };
 
 CONFIG.ChatMessage.dataModels = config$1;
 CONFIG.ChatMessage.documentClass = DhpChatMessage;
@@ -30712,8 +31586,10 @@ CONFIG.Token.hudClass = DHTokenHUD;
 
 CONFIG.ui.combat = DhCombatTracker;
 CONFIG.ui.chat = DhpChatLog;
+CONFIG.ui.effectsDisplay = DhEffectsDisplay;
 CONFIG.ui.hotbar = DhHotbar;
 CONFIG.ui.sidebar = DhSidebar;
+CONFIG.ui.actors = DhActorDirectory;
 CONFIG.ui.daggerheartMenu = DaggerheartMenu;
 CONFIG.ui.resources = FearTracker;
 CONFIG.ui.countdowns = DhCountdowns;
@@ -30817,6 +31693,9 @@ Hooks.on('ready', async () => {
         ui.countdowns = new CONFIG.ui.countdowns();
         ui.countdowns.render({ force: true });
     }
+
+    ui.effectsDisplay = new CONFIG.ui.effectsDisplay();
+    ui.effectsDisplay.render({ force: true });
 
     if (!(ui.compendiumBrowser instanceof ItemBrowser))
         ui.compendiumBrowser = new ItemBrowser();

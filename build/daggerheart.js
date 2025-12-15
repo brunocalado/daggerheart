@@ -916,7 +916,7 @@ const AdversaryBPPerEncounter = (adversaries, characters) => {
             if (type.partyAmountPerBP) {
                 acc += characters.length === 0 ? 0 : Math.ceil(entry.nr / characters.length);
             } else {
-                acc += bpCost;
+                acc += bpCost * entry.nr;
             }
 
             return acc;
@@ -3145,7 +3145,8 @@ const gameSettings = {
     LevelTiers: 'LevelTiers',
     Countdowns: 'Countdowns',
     LastMigrationVersion: 'LastMigrationVersion',
-    TagTeamRoll: 'TagTeamRoll'
+    TagTeamRoll: 'TagTeamRoll',
+    SpotlightRequestQueue: 'SpotlightRequestQueue',
 };
 
 const actionAutomationChoices = {
@@ -4218,7 +4219,7 @@ foundry.dice.terms.Die.prototype.selfCorrecting = function (modifier) {
 };
 
 const getDamageKey = damage => {
-    return ['none', 'minor', 'major', 'severe', 'any'][damage];
+    return ['none', 'minor', 'major', 'severe', 'massive','any'][damage];
 };
 
 const getDamageLabel = damage => {
@@ -4231,7 +4232,8 @@ const damageKeyToNumber = key => {
         minor: 1,
         major: 2,
         severe: 3,
-        any: 4
+        massive: 4,
+        any: 5
     }[key];
 };
 
@@ -4465,7 +4467,7 @@ function refreshIsAllowed(allowedTypes, typeToCheck) {
 
 async function getCritDamageBonus(formula) {
     const critRoll = new Roll(formula);
-    return critRoll.dice.reduce((acc, dice) => acc + dice.faces, 0);
+    return critRoll.dice.reduce((acc, dice) => acc + dice.faces * dice.number, 0);
 }
 
 const { HandlebarsApplicationMixin: HandlebarsApplicationMixin$w, ApplicationV2: ApplicationV2$u } = foundry.applications.api;
@@ -6863,7 +6865,7 @@ class DhpDowntime extends HandlebarsApplicationMixin$p(ApplicationV2$n) {
             if (
                 x.system.resource &&
                 x.system.resource.type &&
-                refreshIsAllowed([this.shortrest ? 'shortRest' : 'longRest'], action.uses.recovery)
+                refreshIsAllowed([this.shortrest ? 'shortRest' : 'longRest'], x.system.resource.recovery)
             ) {
                 acc.push({
                     title: game.i18n.localize(`TYPES.Item.${x.type}`),
@@ -7486,6 +7488,60 @@ function DHApplicationMixin(Base) {
         _attachPartListeners(partId, htmlElement, options) {
             super._attachPartListeners(partId, htmlElement, options);
             this._dragDrop.forEach(d => d.bind(htmlElement));
+
+            for (const deltaInput of htmlElement.querySelectorAll('input[data-allow-delta]')) {
+                deltaInput.dataset.numValue = deltaInput.value;
+                deltaInput.inputMode = 'numeric';
+                deltaInput.pattern = '^[+=\\-]?\d*';
+
+                const handleUpdate = (delta = 0) => {
+                    const min = Number(deltaInput.min) || 0;
+                    const max = Number(deltaInput.max) || Infinity;
+                    const current = Number(deltaInput.dataset.numValue);
+                    const rawNumber = Number(deltaInput.value);
+                    if (Number.isNaN(rawNumber)) {
+                        deltaInput.value = delta ? Math.clamp(current + delta, min, max) : current;
+                        return;
+                    }
+
+                    const newValue =
+                        deltaInput.value.startsWith('+') || deltaInput.value.startsWith('-')
+                            ? Math.clamp(current + rawNumber + delta, min, max)
+                            : Math.clamp(rawNumber + delta, min, max);
+                    deltaInput.value = deltaInput.dataset.numValue = newValue;
+                };
+
+                // Force valid characters while inputting
+                deltaInput.addEventListener('input', () => {
+                    deltaInput.value = /[+=\-]?\d*/.exec(deltaInput.value)?.at(0) ?? deltaInput.value;
+                });
+
+                // Recreate Keyup/Keydown support
+                deltaInput.addEventListener('keydown', event => {
+                    const step = event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0;
+                    if (step !== 0) {
+                        handleUpdate(step);
+                        deltaInput.dispatchEvent(new Event("change", { bubbles: true }));
+                    }
+                });
+
+                // Mousewheel while focused support
+                deltaInput.addEventListener(
+                    'wheel',
+                    event => {
+                        if (deltaInput === document.activeElement) {
+                            event.preventDefault();
+                            handleUpdate(Math.sign(-1 * event.deltaY));
+                            deltaInput.dispatchEvent(new Event("change", { bubbles: true }));
+                        }
+                    },
+                    { passive: false }
+                );
+
+                deltaInput.addEventListener('change', () => {
+                    handleUpdate();
+                });
+            }
         }
 
         /**@inheritdoc */
@@ -7633,7 +7689,8 @@ function DHApplicationMixin(Base) {
             if (data.type === 'ActiveEffect' && data.fromInternal !== this.document.uuid) {
                 this.document.createEmbeddedDocuments('ActiveEffect', [data.data]);
             } else {
-                return super._onDrop(event);
+                // Fallback to super, but note that item sheets do not have this function
+                return super._onDrop?.(event);
             }
         }
 
@@ -8207,6 +8264,7 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
                     value: context.source.system.gold[key]
                 };
             }
+            context.inventory.hasCurrency = Object.values(context.inventory.currencies).some((c) => c.enabled);
         }
 
         return context;
@@ -8252,6 +8310,10 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
     _attachPartListeners(partId, htmlElement, options) {
         super._attachPartListeners(partId, htmlElement, options);
 
+        htmlElement.querySelectorAll('.inventory-item-quantity').forEach(element => {
+            element.addEventListener('change', this.updateItemQuantity.bind(this));
+            element.addEventListener('click', e => e.stopPropagation());
+        });
         htmlElement.querySelectorAll('.item-button .action-uses-button').forEach(element => {
             element.addEventListener('contextmenu', DHBaseActorSheet.#modifyActionUses);
         });
@@ -8288,6 +8350,15 @@ class DHBaseActorSheet extends DHApplicationMixin(ActorSheetV2) {
      */
     static #getFeatureContextOptions() {
         return this._getContextMenuCommonOptions.call(this, { usable: true, toChat: true });
+    }
+
+    /* -------------------------------------------- */
+    /*  Application Listener Actions                */
+    /* -------------------------------------------- */
+
+    async updateItemQuantity(event) {
+        const item = await getDocFromElement(event.currentTarget);
+        await item?.update({ 'system.quantity': event.currentTarget.value });
     }
 
     /* -------------------------------------------- */
@@ -12936,6 +13007,10 @@ class DhpActor extends Actor {
         return updates;
     }
 
+    /**
+     * Resources are modified asynchronously, so be careful not to update the same resource in
+     * quick succession.
+     */
     async modifyResource(resources) {
         if (!resources?.length) return;
 
@@ -13018,6 +13093,10 @@ class DhpActor extends Actor {
     }
 
     convertDamageToThreshold(damage) {
+        const massiveDamageEnabled=game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.variantRules).massiveDamage.enabled;
+        if (massiveDamageEnabled && damage >= (this.system.damageThresholds.severe * 2)) {
+            return 4; 
+        }
         return damage >= this.system.damageThresholds.severe ? 3 : damage >= this.system.damageThresholds.major ? 2 : 1;
     }
 
@@ -13111,7 +13190,7 @@ class DhpActor extends Actor {
                 acc.push(effect);
 
                 const currentStatusActiveEffects = acc.filter(
-                    x => x.statuses.size === 1 && x.name === game.i18n.localize(statusMap.get(x.statuses.first()).name)
+                    x => x.statuses.size === 1 && x.name === game.i18n.localize(statusMap.get(x.statuses.first())?.name)
                 );
 
                 for (var status of effect.statuses) {
@@ -14984,6 +15063,8 @@ class DHTokenHUD extends foundry.applications.hud.TokenHUD {
         for (const effect of activeEffects) {
             for (const statusId of effect.statuses) {
                 const status = choices[statusId];
+                if (!status) continue;
+
                 status.instances = 1 + (status.instances ?? 0);
                 status.locked = status.locked || effect.condition || status.instances > 1;
                 if (!status) continue;
@@ -15992,14 +16073,15 @@ class DhAutomation extends foundry.abstract.DataModel {
     }
 }
 
-const currencyField = (initial, label) =>
+const currencyField = (initial, label, icon) =>
     new foundry.data.fields.SchemaField({
         enabled: new foundry.data.fields.BooleanField({ required: true, initial: true }),
         label: new foundry.data.fields.StringField({
             required: true,
             initial,
             label
-        })
+        }),
+        icon: new foundry.data.fields.StringField({ required: true, nullable: false, blank: true, initial: icon })
     });
 
 class DhHomebrew extends foundry.abstract.DataModel {
@@ -16036,10 +16118,22 @@ class DhHomebrew extends foundry.abstract.DataModel {
                     initial: 'Gold',
                     label: 'DAGGERHEART.SETTINGS.Homebrew.currency.currencyName'
                 }),
-                coins: currencyField('Coins', 'DAGGERHEART.SETTINGS.Homebrew.currency.coinName'),
-                handfuls: currencyField('Handfuls', 'DAGGERHEART.SETTINGS.Homebrew.currency.handfulName'),
-                bags: currencyField('Bags', 'DAGGERHEART.SETTINGS.Homebrew.currency.bagName'),
-                chests: currencyField('Chests', 'DAGGERHEART.SETTINGS.Homebrew.currency.chestName')
+                coins: currencyField(
+                    'Coins',
+                    'DAGGERHEART.SETTINGS.Homebrew.currency.coinName',
+                    'fa-solid fa-coin-front'
+                ),
+                handfuls: currencyField(
+                    'Handfuls',
+                    'DAGGERHEART.SETTINGS.Homebrew.currency.handfulName',
+                    'fa-solid fa-coins'
+                ),
+                bags: currencyField('Bags', 'DAGGERHEART.SETTINGS.Homebrew.currency.bagName', 'fa-solid fa-sack'),
+                chests: currencyField(
+                    'Chests',
+                    'DAGGERHEART.SETTINGS.Homebrew.currency.chestName',
+                    'fa-solid fa-treasure-chest'
+                )
             }),
             restMoves: new fields.SchemaField({
                 longRest: new fields.SchemaField({
@@ -16130,22 +16224,10 @@ class DhHomebrew extends foundry.abstract.DataModel {
     /** @inheritDoc */
     _initializeSource(source, options = {}) {
         source = super._initializeSource(source, options);
-        source.currency.coins = {
-            enabled: source.currency.coins.enabled ?? true,
-            label: source.currency.coins.label || source.currency.coins
-        };
-        source.currency.handfuls = {
-            enabled: source.currency.handfuls.enabled ?? true,
-            label: source.currency.handfuls.label || source.currency.handfuls
-        };
-        source.currency.bags = {
-            enabled: source.currency.bags.enabled ?? true,
-            label: source.currency.bags.label || source.currency.bags
-        };
-        source.currency.chests = {
-            enabled: source.currency.chests.enabled ?? true,
-            label: source.currency.chests.label || source.currency.chests
-        };
+        for (const type of ['coins', 'handfuls', 'bags', 'chests']) {
+            const initial = this.schema.fields.currency.fields[type].getInitialValue();
+            source.currency[type] = foundry.utils.mergeObject(initial, source.currency[type], { inplace: false });
+        }
         return source;
     }
 }
@@ -16191,6 +16273,13 @@ class DhVariantRules extends foundry.abstract.DataModel {
                     label: 'DAGGERHEART.CONFIG.Range.close.name'
                 }),
                 far: new fields.NumberField({ required: true, initial: 60, label: 'DAGGERHEART.CONFIG.Range.far.name' })
+            }),
+            massiveDamage: new fields.SchemaField({
+                enabled: new fields.BooleanField({
+                    required: true,
+                    initial: false,
+                    label: 'DAGGERHEART.SETTINGS.VariantRules.FIELDS.massiveDamage.enabled.label'
+                })
             })
         };
     }
@@ -16300,6 +16389,7 @@ class DhHomebrewSettings extends HandlebarsApplicationMixin$7(ApplicationV2$7) {
             icon: 'fa-solid fa-gears'
         },
         actions: {
+            editCurrencyIcon: this.changeCurrencyIcon,
             addItem: this.addItem,
             editItem: this.editItem,
             removeItem: this.removeItem,
@@ -16381,6 +16471,45 @@ class DhHomebrewSettings extends HandlebarsApplicationMixin$7(ApplicationV2$7) {
             traitArray: Object.values(updatedSettings.traitArray)
         });
         this.render();
+    }
+
+    static async changeCurrencyIcon(_, target) {
+        const type = target.dataset.currency;
+        const currentIcon = this.settings.currency[type].icon;
+        const icon = await foundry.applications.api.DialogV2.input({
+            classes: ['daggerheart', 'dh-style', 'change-currency-icon'],
+            content: await foundry.applications.handlebars.renderTemplate(
+                'systems/daggerheart/templates/settings/homebrew-settings/change-currency-icon.hbs',
+                { currentIcon }
+            ),
+            window: {
+                title: game.i18n.localize('DAGGERHEART.SETTINGS.Homebrew.currency.changeIcon'),
+                icon: 'fa-solid fa-coins'
+            },
+            render: (_, dialog) => {
+                const icon = dialog.element.querySelector('.displayed-icon i');
+                const input = dialog.element.querySelector('input');
+                const reset = dialog.element.querySelector('button[data-action=reset]');
+                input.addEventListener('input', () => {
+                    icon.classList.value = input.value;
+                });
+                reset.addEventListener('click', () => {
+                    const currencyField = DhHomebrew.schema.fields.currency.fields[type];
+                    const initial = currencyField.fields.icon.getInitialValue();
+                    input.value = icon.classList.value = initial;
+                });
+            },
+            ok: {
+                callback: (_, button) => button.form.elements.icon.value
+            }
+        });
+
+        if (icon !== null) {
+            await this.settings.updateSource({
+                [`currency.${type}.icon`]: icon
+            });
+            this.render();
+        }
     }
 
     static async addItem(_, target) {
@@ -17154,10 +17283,6 @@ class CharacterSheet extends DHBaseActorSheet {
             element.addEventListener('change', this.updateItemResource.bind(this));
             element.addEventListener('click', e => e.stopPropagation());
         });
-        htmlElement.querySelectorAll('.inventory-item-quantity').forEach(element => {
-            element.addEventListener('change', this.updateItemQuantity.bind(this));
-            element.addEventListener('click', e => e.stopPropagation());
-        });
 
         // Add listener for armor marks input
         htmlElement.querySelectorAll('.armor-marks-input').forEach(element => {
@@ -17608,14 +17733,6 @@ class CharacterSheet extends DHBaseActorSheet {
         this.render();
     }
 
-    async updateItemQuantity(event) {
-        const item = await getDocFromElement(event.currentTarget);
-        if (!item) return;
-
-        await item.update({ 'system.quantity': event.currentTarget.value });
-        this.render();
-    }
-
     async updateArmorMarks(event) {
         const armor = this.document.system.armor;
         if (!armor) return;
@@ -17704,7 +17821,7 @@ class CharacterSheet extends DHBaseActorSheet {
             },
             hasRoll: true
         };
-        const result = await this.document.diceRoll({
+        await this.document.diceRoll({
             ...config,
             actionType: 'action',
             headerTitle: `${game.i18n.localize('DAGGERHEART.GENERAL.dualityRoll')}: ${this.actor.name}`,
@@ -17712,8 +17829,6 @@ class CharacterSheet extends DHBaseActorSheet {
                 ability: abilityLabel
             })
         });
-
-        if (result) game.system.api.fields.ActionFields.CostField.execute.call(this, result);
     }
 
     //TODO: redo toggleEquipItem method
@@ -22513,14 +22628,20 @@ class DhCountdowns extends HandlebarsApplicationMixin$2(ApplicationV2$2) {
         return super.close(options);
     }
 
-    static async updateCountdowns(progressType) {
+    /**
+     * Sends updates of the countdowns to the GM player. Since this is asynchronous, be sure to
+     * update all the countdowns at the same time.
+     *
+     * @param  {...any} progressTypes Countdowns to be updated
+     */
+    static async updateCountdowns(...progressTypes) {
         const { countdownAutomation } = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Automation);
         if (!countdownAutomation) return;
 
         const countdownSetting = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Countdowns);
         const updatedCountdowns = Object.keys(countdownSetting.countdowns).reduce((acc, key) => {
             const countdown = countdownSetting.countdowns[key];
-            if (countdown.progress.type === progressType && countdown.progress.current > 0) {
+            if (progressTypes.indexOf(countdown.progress.type) !== -1 && countdown.progress.current > 0) {
                 acc.push(key);
             }
 
@@ -22528,7 +22649,7 @@ class DhCountdowns extends HandlebarsApplicationMixin$2(ApplicationV2$2) {
         }, []);
 
         const countdownData = countdownSetting.toObject();
-        await game.settings.set(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Countdowns, {
+        const settings = {
             ...countdownData,
             countdowns: Object.keys(countdownData.countdowns).reduce((acc, key) => {
                 const countdown = foundry.utils.deepClone(countdownData.countdowns[key]);
@@ -22539,14 +22660,12 @@ class DhCountdowns extends HandlebarsApplicationMixin$2(ApplicationV2$2) {
                 acc[key] = countdown;
                 return acc;
             }, {})
+        };
+        await emitAsGM(GMUpdateEvent.UpdateCountdowns,
+            DhCountdowns.gmSetSetting.bind(settings),
+            settings, null, {
+                refreshType: RefreshType.Countdown
         });
-
-        const data = { refreshType: RefreshType.Countdown };
-        await game.socket.emit(`system.${CONFIG.DH.id}`, {
-            action: socketEvent.Refresh,
-            data
-        });
-        Hooks.callAll(socketEvent.Refresh, data);
     }
 
     async _onRender(context, options) {
@@ -22802,7 +22921,6 @@ class DhpChatLog extends foundry.applications.sidebar.tabs.ChatLog {
         });
 
         if (!result) return;
-        await game.system.api.fields.ActionFields.CostField.execute.call({ actor }, result);
 
         const newMessageData = foundry.utils.deepClone(message.system);
         foundry.utils.setProperty(newMessageData, `${path}.result`, result.roll);
@@ -22968,13 +23086,13 @@ class DhCombatTracker extends foundry.applications.sidebar.tabs.CombatTracker {
         const modifierBP =
             this.combats
                 .find(x => x.active)
-                ?.system?.extendedBattleToggles?.reduce((acc, toggle) => acc + toggle.category, 0) ?? 0;
+                ?.system?.extendedBattleToggles?.reduce((acc, toggle) => (acc ?? 0) + toggle.category, null) ?? null;
         const maxBP = CONFIG.DH.ENCOUNTER.BaseBPPerEncounter(context.characters.length) + modifierBP;
         const currentBP = AdversaryBPPerEncounter(context.adversaries, context.characters);
 
         Object.assign(context, {
             fear: game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Resources.Fear),
-            battlepoints: { max: maxBP, current: currentBP, hasModifierBP: Boolean(modifierBP) }
+            battlepoints: { max: maxBP, current: currentBP, hasModifierBP: modifierBP !== null }
         });
     }
 
@@ -22983,21 +23101,21 @@ class DhCombatTracker extends foundry.applications.sidebar.tabs.CombatTracker {
 
         const adversaries = context.turns?.filter(x => x.isNPC) ?? [];
         const characters = context.turns?.filter(x => !x.isNPC) ?? [];
+        const spotlightQueueEnabled = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.SpotlightRequestQueue);
 
         const spotlightRequests = characters
-            ?.filter(x => !x.isNPC)
+            ?.filter(x => !x.isNPC && spotlightQueueEnabled)
             .filter(x => x.system.spotlight.requestOrderIndex > 0)
             .sort((a, b) => {
                 const valueA = a.system.spotlight.requestOrderIndex;
                 const valueB = b.system.spotlight.requestOrderIndex;
-
                 return valueA - valueB;
             });
 
         Object.assign(context, {
             actionTokens: game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.variantRules).actionTokens,
             adversaries,
-            characters: characters?.filter(x => !x.isNPC).filter(x => x.system.spotlight.requestOrderIndex == 0),
+            characters: characters?.filter(x => !x.isNPC).filter(x => !spotlightQueueEnabled || x.system.spotlight.requestOrderIndex == 0),
             spotlightRequests
         });
     }
@@ -23087,9 +23205,11 @@ class DhCombatTracker extends foundry.applications.sidebar.tabs.CombatTracker {
 
         if (this.viewed.turn !== toggleTurn) {
             const { updateCountdowns } = game.system.api.applications.ui.DhCountdowns;
-            await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.spotlight.id);
             if (combatant.actor.type === 'character') {
-                await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.characterSpotlight.id);
+                await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.spotlight.id,
+                    CONFIG.DH.GENERAL.countdownProgressionTypes.characterSpotlight.id);
+            } else {
+                await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.spotlight.id);
             }
 
             const autoPoints = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Automation).actionPoints;
@@ -23225,7 +23345,7 @@ class DhEffectsDisplay extends HandlebarsApplicationMixin$1(ApplicationV2$1) {
     async removeEffect(event) {
         const element = event.target.closest('.effect-container');
         const effects = DhEffectsDisplay.getTokenEffects();
-        const effect = effects.find(x => x.id === element.id);
+        const effect = effects.find(x => x.id === element.dataset.effectId);
         await effect.delete();
         this.render();
     }
@@ -28811,6 +28931,7 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
         let html = options.html;
         if (element.dataset.tooltip?.startsWith('#battlepoints#')) {
             this.#wide = true;
+            this.#bordered = true;
 
             html = await this.getBattlepointHTML(element.dataset.combatId);
             options.direction = this._determineItemTooltipDirection(element);
@@ -28823,6 +28944,7 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
             return;
         } else {
             this.#wide = false;
+            this.#bordered = false;
         }
 
         if (element.dataset.tooltip === '#effect-display#') {
@@ -28874,7 +28996,8 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
                     {
                         item: item,
                         description: item.system?.enrichedDescription ?? item.enrichedDescription,
-                        config: CONFIG.DH
+                        config: CONFIG.DH,
+                        allDomains: CONFIG.DH.DOMAIN.allDomains()
                     }
                 );
 
@@ -28969,14 +29092,6 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
         super.activate(element, { ...options, html: html });
     }
 
-    _setStyle(position = {}) {
-        super._setStyle(position);
-
-        if (this.#bordered) {
-            this.tooltip.classList.add('bordered-tooltip');
-        }
-    }
-
     _determineItemTooltipDirection(element, prefered = this.constructor.TOOLTIP_DIRECTIONS.LEFT) {
         const pos = element.getBoundingClientRect();
         const dirs = this.constructor.TOOLTIP_DIRECTIONS;
@@ -29048,12 +29163,17 @@ class DhTooltipManager extends foundry.helpers.interaction.TooltipManager {
         if (this.#wide) {
             this.tooltip.classList.add('wide');
         }
+
+        if (this.#bordered) {
+            this.tooltip.classList.add('bordered-tooltip');
+        }
     }
 
     /**@inheritdoc */
     lockTooltip() {
         const clone = super.lockTooltip();
-        clone.classList.add('wide');
+        if (this.#wide) clone.classList.add('wide');
+        if (this.#bordered) clone.classList.add('bordered-tooltip');
 
         return clone;
     }
@@ -29530,6 +29650,51 @@ class DHRoll extends Roll {
     }
 }
 
+async function automateHopeFear(config) {
+    const automationSettings = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Automation);
+    const hopeFearAutomation = automationSettings.hopeFear;
+    if (!config.source?.actor ||
+        (game.user.isGM ? !hopeFearAutomation.gm : !hopeFearAutomation.players) ||
+        config.actionType === 'reaction' ||
+        config.tagTeamSelected ||
+        config.skips?.resources)
+        return;
+    const actor = await fromUuid(config.source.actor);
+    let updates = [];
+    if (!actor) return;
+
+    if (config.rerolledRoll) {
+        if (config.roll.result.duality != config.rerolledRoll.result.duality) {
+            const hope = (config.roll.isCritical || config.roll.result.duality === 1 ? 1 : 0)
+                - (config.rerolledRoll.isCritical || config.rerolledRoll.result.duality === 1 ? 1 : 0);
+            const stress = (config.roll.isCritical ? 1 : 0) - (config.rerolledRoll.isCritical ? 1 : 0);
+            const fear = (config.roll.result.duality === -1 ? 1 : 0)
+                - (config.rerolledRoll.result.duality === -1 ? 1 : 0);
+
+            if (hope !== 0)
+                updates.push({ key: 'hope', value: hope, total: -1 * hope, enabled: true });
+            if (stress !== 0)
+                updates.push({ key: 'stress', value: -1 * stress, total: stress, enabled: true });
+            if (fear !== 0)
+                updates.push({ key: 'fear', value: fear, total: -1 * fear, enabled: true });
+        }
+    } else {
+        if (config.roll.isCritical || config.roll.result.duality === 1)
+            updates.push({ key: 'hope', value: 1, total: -1, enabled: true });
+        if (config.roll.isCritical)
+            updates.push({ key: 'stress', value: -1, total: 1, enabled: true });
+        if (config.roll.result.duality === -1)
+            updates.push({ key: 'fear', value: 1, total: -1, enabled: true });
+    }
+
+    if (updates.length) {
+        const target = actor.system.partner ?? actor;
+        if (!['dead', 'defeated', 'unconscious'].some(x => actor.statuses.has(x))) {
+            await target.modifyResource(updates);
+        }
+    }
+}
+
 const registerRollDiceHooks = () => {
     Hooks.on(`${CONFIG.DH.id}.postRollDuality`, async (config, message) => {
         const automationSettings = game.settings.get(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.Automation);
@@ -29540,45 +29705,16 @@ const registerRollDiceHooks = () => {
             !config.skips?.updateCountdowns
         ) {
             const { updateCountdowns } = game.system.api.applications.ui.DhCountdowns;
-            await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.actionRoll.id);
 
             if (config.roll.result.duality === -1) {
-                await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.fear.id);
+                await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.actionRoll.id,
+                    CONFIG.DH.GENERAL.countdownProgressionTypes.fear.id);
+            } else {
+                await updateCountdowns(CONFIG.DH.GENERAL.countdownProgressionTypes.actionRoll.id);
             }
         }
 
-        const hopeFearAutomation = automationSettings.hopeFear;
-        if (
-            !config.source?.actor ||
-            (game.user.isGM ? !hopeFearAutomation.gm : !hopeFearAutomation.players) ||
-            config.actionType === 'reaction' ||
-            config.tagTeamSelected ||
-            config.skips?.resources
-        )
-            return;
-        const actor = await fromUuid(config.source.actor);
-        let updates = [];
-        if (!actor) return;
-        if (config.roll.isCritical || config.roll.result.duality === 1)
-            updates.push({ key: 'hope', value: 1, total: -1, enabled: true });
-        if (config.roll.isCritical) updates.push({ key: 'stress', value: 1, total: -1, enabled: true });
-        if (config.roll.result.duality === -1) updates.push({ key: 'fear', value: 1, total: -1, enabled: true });
-
-        if (config.rerolledRoll) {
-            if (config.rerolledRoll.isCritical || config.rerolledRoll.result.duality === 1)
-                updates.push({ key: 'hope', value: -1, total: 1, enabled: true });
-            if (config.rerolledRoll.isCritical) updates.push({ key: 'stress', value: -1, total: 1, enabled: true });
-            if (config.rerolledRoll.result.duality === -1)
-                updates.push({ key: 'fear', value: -1, total: 1, enabled: true });
-        }
-
-        if (updates.length) {
-            const target = actor.system.partner ?? actor;
-            if (!['dead', 'defeated', 'unconscious'].some(x => actor.statuses.has(x))) {
-                if (config.rerolledRoll) target.modifyResource(updates);
-                else config.costs = [...(config.costs ?? []), ...updates];
-            }
-        }
+        await automateHopeFear(config);
 
         if (!config.roll.hasOwnProperty('success') && !config.targets?.length) return;
 
@@ -29589,8 +29725,6 @@ const registerRollDiceHooks = () => {
             const currentCombatant = game.combat.combatants.get(game.combat.current?.combatantId);
             if (currentCombatant?.actorId == actor.id) ui.combat.setCombatantSpotlight(currentCombatant.id);
         }
-
-        return;
     });
 };
 
@@ -30419,8 +30553,7 @@ class DualityRoll extends D20Roll {
             targets: message.system.targets,
             tagTeamSelected: Object.values(tagTeamSettings.members).some(x => x.messageId === message._id),
             roll: newRoll,
-            rerolledRoll:
-                newRoll.result.duality !== message.system.roll.result.duality ? message.system.roll : undefined
+            rerolledRoll: message.system.roll
         });
         return { newRoll, parsedRoll };
     }
@@ -30930,6 +31063,16 @@ const registerDHSettings = () => {
     registerMenuSettings();
     registerMenus();
     registerNonConfigSettings();
+
+    game.settings.register(CONFIG.DH.id, CONFIG.DH.SETTINGS.gameSettings.SpotlightRequestQueue, {
+        name: game.i18n.localize('DAGGERHEART.SETTINGS.Menu.SpotlightRequestQueue.name'),
+        label: game.i18n.localize('DAGGERHEART.SETTINGS.Menu.SpotlightRequestQueue.label'),
+        hint: game.i18n.localize('DAGGERHEART.SETTINGS.Menu.SpotlightRequestQueue.hint'),
+        scope: 'world',
+        config: true,
+        type: Boolean,
+        onChange: () => ui.combat.render(),
+    });
 };
 
 const registerMenuSettings = () => {

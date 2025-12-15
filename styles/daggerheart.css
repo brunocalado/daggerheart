@@ -22,7 +22,7 @@ body.theme-light.application.daggerheart .limited-container .domains-section img
 }
 .application.sheet.daggerheart.actor.dh-style .attribution-header-label {
   font-style: italic;
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   color: light-dark(var(--chat-blue-bg, #14142599), var(--beige-50, #efe6d850));
 }
 .application.sheet.daggerheart.actor.dh-style.limited.character .window-content,
@@ -381,7 +381,7 @@ body.theme-light.application.daggerheart .limited-container .domains-section img
   align-items: center;
   padding: 3px 5px;
   font-size: var(--font-size-12);
-  font: var(--font-body, 'Montserrat'), sans-serif;
+  font: var(--dh-font-body, 'Montserrat'), sans-serif;
   background: light-dark(var(--dark-15, #22222215), var(--beige-15, #efe6d815));
   border: 1px solid light-dark(var(--dark, #222222), var(--beige, #efe6d8));
   border-radius: 3px;
@@ -444,7 +444,7 @@ body.theme-light.application.daggerheart .limited-container .domains-section img
   align-items: center;
   padding: 3px 5px;
   font-size: var(--font-size-12);
-  font: var(--font-body, 'Montserrat'), sans-serif;
+  font: var(--dh-font-body, 'Montserrat'), sans-serif;
   background: light-dark(var(--dark-15, #22222215), var(--beige-15, #efe6d815));
   border: 1px solid light-dark(var(--dark, #222222), var(--beige, #efe6d8));
   border-radius: 3px;
@@ -2079,7 +2079,7 @@ body.theme-light.application.daggerheart.companion {
   align-items: center;
   padding: 3px 5px;
   font-size: var(--font-size-12);
-  font: var(--font-body, 'Montserrat'), sans-serif;
+  font: var(--dh-font-body, 'Montserrat'), sans-serif;
   background: light-dark(var(--dark-15, #22222215), var(--beige-15, #efe6d815));
   border: 1px solid light-dark(var(--dark, #222222), var(--beige, #efe6d8));
   border-radius: 3px;
@@ -2592,7 +2592,7 @@ body.game:is(.performance-low, .noblur) .application.sheet.daggerheart.actor.dh-
 }
 .application.sheet.daggerheart.dh-style.item .attribution-header-label {
   font-style: italic;
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   color: light-dark(var(--chat-blue-bg, #14142599), var(--beige-50, #efe6d850));
 }
 .application.daggerheart.dh-style.dialog .window-content .dialog-header {
@@ -2600,7 +2600,7 @@ body.game:is(.performance-low, .noblur) .application.sheet.daggerheart.actor.dh-
   padding-bottom: 16px;
 }
 .application.daggerheart.dh-style.dialog .window-content .dialog-header h1 {
-  font-family: var(--font-subtitle, 'Cinzel'), serif;
+  font-family: var(--dh-font-subtitle, 'Cinzel'), serif;
   font-style: normal;
   font-weight: 700;
   font-size: var(--font-size-24);
@@ -4118,7 +4118,7 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
   height: 32px;
 }
 .application.daggerheart.dialog.dh-style.views.roll-selection .roll-dialog-container .dices-section .dice-option .dice-select .label {
-  font-family: var(--font-subtitle, 'Cinzel'), serif;
+  font-family: var(--dh-font-subtitle, 'Cinzel'), serif;
   font-style: normal;
   font-weight: 700;
   font-size: var(--font-size-16);
@@ -4744,6 +4744,17 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
 .daggerheart.dh-style.dialog.item-transfer .item-sheet-footer button {
   flex: 1;
 }
+.application.daggerheart.dialog.dh-style.change-currency-icon .displayed-icon {
+  height: 2.5rem;
+  text-align: center;
+  font-size: 2.5rem;
+  margin-bottom: 1.25rem;
+}
+.application.daggerheart.dialog.dh-style.change-currency-icon .input-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
 .theme-light .daggerheart.placeable-hud .status-effects .effect-control {
   filter: none;
 }
@@ -4783,7 +4794,7 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
 .daggerheart.placeable-hud .status-effects .effect-control-container .effect-locked {
   position: absolute;
   bottom: 2px;
-  right: 2px;
+  left: 11.5px;
   font-size: 12px;
   color: var(--golden, #f3c267);
   filter: drop-shadow(0 0 3px black);
@@ -4905,28 +4916,28 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
   src: url(https://fonts.gstatic.com/s/montserrat/v31/JTUHjIg1_i6t8kCHKm4532VJOt5-QNFgpCu170w-.ttf) format('truetype');
 }
 :root {
-  --font-title: 'Cinzel Decorative';
-  --font-subtitle: 'Cinzel';
-  --font-body: 'Montserrat';
+  --dh-font-title: 'Cinzel Decorative';
+  --dh-font-subtitle: 'Cinzel';
+  --dh-font-body: 'Montserrat';
 }
 .dh-style h1 {
-  font-family: var(--font-title, 'Cinzel Decorative'), serif;
+  font-family: var(--dh-font-title, 'Cinzel Decorative'), serif;
   margin: 0;
   border: none;
   font-weight: normal;
 }
 .dh-style h1 input[type='text'] {
-  font-family: var(--font-title, 'Cinzel Decorative'), serif;
+  font-family: var(--dh-font-title, 'Cinzel Decorative'), serif;
 }
 .dh-style h2,
 .dh-style h3 {
-  font-family: var(--font-subtitle, 'Cinzel'), serif;
+  font-family: var(--dh-font-subtitle, 'Cinzel'), serif;
   margin: 0;
   border: none;
   font-weight: normal;
 }
 .dh-style h4 {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   font-size: var(--font-size-14);
   border: none;
   font-weight: 700;
@@ -4935,7 +4946,7 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
   font-weight: normal;
 }
 .dh-style h5 {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   font-size: var(--font-size-14);
   margin: 0;
   font-weight: normal;
@@ -4953,36 +4964,36 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
 .dh-style input[type='search'],
 .dh-style .tagify__dropdown,
 .dh-style li {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .dh-style button span {
   font-weight: bold;
 }
 .dh-style small {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   opacity: 0.8;
 }
 .dh-style nav a {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .dh-style fieldset h1 {
-  font-family: var(--font-title, 'Cinzel Decorative'), serif;
+  font-family: var(--dh-font-title, 'Cinzel Decorative'), serif;
   margin: 0;
   border: none;
   font-weight: normal;
 }
 .dh-style fieldset h1 input[type='text'] {
-  font-family: var(--font-title, 'Cinzel Decorative'), serif;
+  font-family: var(--dh-font-title, 'Cinzel Decorative'), serif;
 }
 .dh-style fieldset h2,
 .dh-style fieldset h3 {
-  font-family: var(--font-subtitle, 'Cinzel'), serif;
+  font-family: var(--dh-font-subtitle, 'Cinzel'), serif;
   margin: 0;
   border: none;
   font-weight: normal;
 }
 .dh-style fieldset h4 {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   font-size: var(--font-size-14);
   border: none;
   font-weight: 700;
@@ -4991,7 +5002,7 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
   font-weight: normal;
 }
 .dh-style fieldset h5 {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   font-size: var(--font-size-14);
   margin: 0;
   font-weight: normal;
@@ -5009,17 +5020,17 @@ body.theme-dark.application.daggerheart .character-creation .main-selections-con
 .dh-style fieldset input[type='search'],
 .dh-style fieldset .tagify__dropdown,
 .dh-style fieldset li {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .dh-style fieldset button span {
   font-weight: bold;
 }
 .dh-style fieldset small {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   opacity: 0.8;
 }
 .dh-style fieldset nav a {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .themed.theme-dark .application.daggerheart.sheet.dh-style,
 .themed.theme-dark.application.daggerheart.sheet.dh-style,
@@ -5058,7 +5069,7 @@ body.game:is(.performance-low, .noblur).theme-dark .application.daggerheart.item
 }
 .application.sheet.dh-style .window-header h1 {
   color: light-dark(var(--dark-blue, #18162e), var(--beige, #efe6d8));
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .application.sheet.dh-style .window-header button {
   background: light-dark(transparent, var(--deep-black, #0e0d15));
@@ -5119,7 +5130,7 @@ body.theme-light.application.daggerheart.dialog {
 }
 .application.dialog.dh-style .window-header h1 {
   color: light-dark(var(--dark-blue, #18162e), var(--beige, #efe6d8));
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .application.dialog.dh-style .window-header button {
   color: light-dark(var(--dark-blue, #18162e), var(--beige, #efe6d8));
@@ -5154,7 +5165,7 @@ body.theme-light.application.daggerheart.dialog {
   gap: 5px;
 }
 .application.dialog.dh-style .standard-form {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .application.dialog.dh-style.two-big-buttons .window-content {
   padding-top: 0;
@@ -5190,7 +5201,7 @@ body.theme-light.application.daggerheart.dialog {
   color: var(--dark-blue, #18162e);
 }
 #chat-message {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   padding: 8px;
 }
 .daggerheart.chat-sidebar .chat-log .chat-message,
@@ -5213,7 +5224,7 @@ body.theme-light.application.daggerheart.dialog {
 }
 .daggerheart.chat-sidebar .chat-log .chat-message .message-header .message-header-metadata .message-metadata,
 #chat-notifications .chat-log .chat-message .message-header .message-header-metadata .message-metadata {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   color: var(--beige, #efe6d8);
 }
 .daggerheart.chat-sidebar .chat-log .chat-message .message-header .message-header-main,
@@ -5245,7 +5256,7 @@ body.theme-light.application.daggerheart.dialog {
   font-size: var(--font-size-16);
   font-weight: bold;
   margin-bottom: 0;
-  font-family: var(--font-subtitle, 'Cinzel'), serif;
+  font-family: var(--dh-font-subtitle, 'Cinzel'), serif;
   color: var(--golden, #f3c267);
 }
 .daggerheart.chat-sidebar .chat-log .chat-message .message-content,
@@ -5728,7 +5739,7 @@ body.theme-light.application.daggerheart.dialog {
   display: flex;
   justify-content: left;
   font-style: italic;
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   margin-top: 4px;
   color: light-dark(#14142599, #efe6d850);
   font-size: var(--font-size-12);
@@ -6014,7 +6025,7 @@ body.theme-light.application.daggerheart.dialog {
   border: 1px dashed light-dark(var(--dark-blue-50, #18162e50), var(--beige-50, #efe6d850));
   border-radius: 3px;
   color: light-dark(var(--dark-blue-50, #18162e50), var(--beige-50, #efe6d850));
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 .daggerheart.dh-style .hint {
   flex: 0 0 100%;
@@ -8372,7 +8383,7 @@ body.theme-light.application.daggerheart .slot-value .slot-bar {
 }
 #interface.theme-light .chat-message:not(.duality) .message-content .roll-buttons button {
   height: 40px;
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   font-weight: bold;
 }
 #interface.theme-light .chat-message:not(.duality) .message-content .dice-roll .dice-formula,
@@ -8390,7 +8401,7 @@ body.theme-light.application.daggerheart .slot-value .slot-bar {
 }
 .chat-message .message-content {
   padding: 0 8px;
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   color: var(--beige, #efe6d8);
 }
 .chat-message .message-content blockquote {
@@ -8618,7 +8629,7 @@ fieldset.daggerheart.chat .daggerheart.chat {
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  font-family: var(--font-subtitle, 'Cinzel'), serif;
+  font-family: var(--dh-font-subtitle, 'Cinzel'), serif;
   font-weight: bold;
   padding: 2px 12px;
   color: light-dark(var(--dark, #222222), var(--beige, #efe6d8));
@@ -8949,7 +8960,7 @@ fieldset.daggerheart.chat .daggerheart.chat {
   transition: 0.3s right ease-in-out;
 }
 .daggerheart.dh-style.countdowns .window-title {
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
 }
 #ui-right:has(#effects-display .effect-container) .daggerheart.dh-style.countdowns {
   right: 62px;
@@ -9129,7 +9140,7 @@ fieldset.daggerheart.chat .daggerheart.chat {
 .daggerheart.application.dh-style.countdown-edit .edit-container .edit-content .countdown-edit-outer-container .countdown-edit-container .countdown-edit-text .countdown-edit-subtext .countdown-edit-sub-tag {
   padding: 3px 5px;
   font-size: var(--font-size-12);
-  font: var(--font-body, 'Montserrat'), sans-serif;
+  font: var(--dh-font-body, 'Montserrat'), sans-serif;
   background: light-dark(var(--dark-15, #22222215), var(--beige-15, #efe6d815));
   border: 1px solid light-dark(var(--dark, #222222), var(--beige, #efe6d8));
   border-radius: 3px;
@@ -9834,6 +9845,10 @@ body.theme-light.application.daggerheart.countdown .minimized-view .mini-countdo
 .locked-tooltip.wide {
   max-width: 480px;
 }
+#tooltip.wide .daggerheart.dh-style.tooltip,
+.locked-tooltip.wide .daggerheart.dh-style.tooltip {
+  align-items: start;
+}
 #tooltip .daggerheart.dh-style.tooltip,
 .locked-tooltip .daggerheart.dh-style.tooltip {
   display: flex;
@@ -9980,7 +9995,11 @@ body.theme-light.application.daggerheart.countdown .minimized-view .mini-countdo
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 16px;
+}
+.daggerheart.dh-style.tooltip .battlepoint-categories-container .battlepoint-categories-inner-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .daggerheart.dh-style.tooltip .battlepoint-categories-container .battlepoint-grouping-container {
   display: flex;
@@ -10009,11 +10028,13 @@ body.theme-light.application.daggerheart.countdown .minimized-view .mini-countdo
 .daggerheart.dh-style.tooltip .battlepoint-toggles-container .battlepoint-toggle-container input {
   margin-top: 0;
 }
-#tooltip.bordered-tooltip {
+#tooltip.bordered-tooltip,
+.locked-tooltip.bordered-tooltip {
   border: 1px solid var(--golden, #f3c267);
   background-image: url('../assets/parchments/dh-parchment-dark.png');
 }
-#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip {
+#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip,
+.locked-tooltip.bordered-tooltip .daggerheart.dh-style.tooltip {
   display: flex;
   flex-direction: column;
   text-align: start;
@@ -10022,14 +10043,17 @@ body.theme-light.application.daggerheart.countdown .minimized-view .mini-countdo
   padding: 0px;
   border-radius: 3px;
 }
-#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header {
+#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header,
+.locked-tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header {
   display: flex;
   flex-direction: column;
+  align-items: center;
   text-align: start;
   padding: 5px;
   gap: 0px;
 }
-#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header h2 {
+#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header h2,
+.locked-tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header h2 {
   display: flex;
   justify-content: start;
   font-size: var(--font-size-20);
@@ -10038,10 +10062,12 @@ body.theme-light.application.daggerheart.countdown .minimized-view .mini-countdo
   margin: 0;
   padding: 0;
 }
-#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header .subtitle {
+#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header .subtitle,
+.locked-tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .tooltip-header .subtitle {
   font-size: 12px;
 }
-#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .close-hint {
+#tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .close-hint,
+.locked-tooltip.bordered-tooltip .daggerheart.dh-style.tooltip .close-hint {
   border-radius: 3px;
   padding: 3px;
   background: #4c340780;
@@ -10062,7 +10088,7 @@ body.theme-light.application.daggerheart.countdown .minimized-view .mini-countdo
   max-height: 400px !important;
   width: fit-content !important;
   overflow-y: auto;
-  font-family: var(--font-body, 'Montserrat'), sans-serif;
+  font-family: var(--dh-font-body, 'Montserrat'), sans-serif;
   display: flex;
   flex-direction: column;
   gap: 2px;
